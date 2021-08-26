@@ -1,0 +1,64 @@
+sudo BPFTRACE_STRLEN=80 bpftrace -e '
+    #include <linux/types.h>
+    #include <linux/skbuff.h>
+
+    struct ipv6hdr {
+        struct {
+            uint8_t priority_version;
+            uint8_t flow_lbl[3];
+            uint16_t payload_len;
+            uint8_t nexthdr;
+            uint8_t hop_limit;
+            union {
+                uint8_t  saddr8[16];
+                uint16_t saddr16[8];
+                uint32_t saddr32[4];
+                uint64_t saddr64[2];
+            };
+            union {
+                uint8_t  daddr8[16];
+                uint16_t daddr16[8];
+                uint32_t daddr32[4];
+                uint64_t daddr64[2];
+            };
+        } __attribute__((packed));
+    }
+
+    struct udphdr {
+        struct {
+            uint16_t source;
+            uint16_t dest;
+            uint16_t len;
+            uint16_t check;
+        } __attribute__((packed));
+    }
+
+    interval:s:60 {
+        exit();
+    }
+
+    kprobe:netif_receive_skb_internal {
+        $skb = (sk_buff*) arg0;
+        $in_ipv6h = (ipv6hdr*) ($skb->head + $skb->mac_header + 42);
+        if ($in_ipv6h->priority_version & 0x60) {
+            if ($in_ipv6h->nexthdr == 17) {
+                $skb = (sk_buff*) arg0;
+                $in_udph = (udphdr*) ($skb->head + $skb->mac_header + 42 + 40);
+                if ($in_udph->dest == 13568) {
+                    time("%H:%M:%S.");
+                    printf("%09ld - kprobe:netif_receive_skb_internal\n", nsecs % 1000000000);
+                    $source = $in_udph->source;
+                    $source = ($source >> 8) | (($source & 0xff) << 8);
+                    $dest = $in_udph->dest;
+                    $dest = ($dest >> 8) | (($dest & 0xff) << 8);
+                    $check = $in_udph->check;
+                    $check = ($check >> 8) | (($check & 0xff) << 8);
+                    $len = $in_udph->len;
+                    $len = ($len >> 8) | (($len & 0xff) << 8);
+                    printf("INNER-UDP: source %d dest %d check %x len %d\n", $source, $dest, $check, $len);
+                    @hits["recv:filtered"] = count();
+                }
+            }
+        }
+        @hits["recv"] = count();
+    }'

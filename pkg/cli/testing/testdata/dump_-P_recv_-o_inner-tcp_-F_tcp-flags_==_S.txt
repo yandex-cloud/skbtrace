@@ -1,0 +1,82 @@
+sudo BPFTRACE_STRLEN=80 bpftrace -e '
+    #include <linux/types.h>
+    #include <linux/skbuff.h>
+
+    struct iphdr {
+        struct {
+            uint8_t ihl_version;
+            uint8_t tos;
+            uint16_t tot_len;
+            uint16_t id;
+            uint16_t frag_off;
+            uint8_t ttl;
+            uint8_t protocol;
+            uint16_t check;
+            uint32_t saddr;
+            uint32_t daddr;
+        } __attribute__((packed));
+    }
+
+    struct tcphdr {
+        struct {
+            uint16_t source;
+            uint16_t dest;
+            uint32_t seq;
+            uint32_t ack_seq;
+            uint8_t flags2_doff;
+            uint8_t flags1;
+            uint16_t window;
+            uint16_t check;
+            uint16_t urg_ptr;
+            uint8_t options[8];
+        } __attribute__((packed));
+    }
+
+    interval:s:60 {
+        exit();
+    }
+
+    kprobe:netif_receive_skb_internal {
+        $skb = (sk_buff*) arg0;
+        $iph = (iphdr*) ($skb->head + $skb->network_header);
+        if ($iph->ihl_version == 0x45) {
+            if ($iph->protocol == 6) {
+                $skb = (sk_buff*) arg0;
+                $tcph = (tcphdr*) ($skb->head + $skb->network_header + 20);
+                if (($tcph->flags1 & 0x17) == 0x2) {
+                    $in_iph = (iphdr*) ($skb->head + $skb->mac_header + 42);
+                    if ($in_iph->ihl_version == 0x45) {
+                        if ($in_iph->protocol == 6) {
+                            $in_tcph = (tcphdr*) ($skb->head + $skb->mac_header + 42 + 20);
+                            time("%H:%M:%S.");
+                            printf("%09ld - kprobe:netif_receive_skb_internal\n", nsecs % 1000000000);
+                            $source = $in_tcph->source;
+                            $source = ($source >> 8) | (($source & 0xff) << 8);
+                            $dest = $in_tcph->dest;
+                            $dest = ($dest >> 8) | (($dest & 0xff) << 8);
+                            $check = $in_tcph->check;
+                            $check = ($check >> 8) | (($check & 0xff) << 8);
+                            printf("INNER-TCP: source %d dest %d check %x\n", $source, $dest, $check);
+                            $seq = $in_tcph->seq;
+                            $seq = ($seq >> 24) | 
+                                       (($seq & 0x00ff0000) >> 8) | 
+                                       (($seq & 0x0000ff00) << 8) | 
+                                       (($seq & 0x000000ff) << 24);
+                            $ack_seq = $in_tcph->ack_seq;
+                            $ack_seq = ($ack_seq >> 24) | 
+                                       (($ack_seq & 0x00ff0000) >> 8) | 
+                                       (($ack_seq & 0x0000ff00) << 8) | 
+                                       (($ack_seq & 0x000000ff) << 24);
+                            $window = $in_tcph->window;
+                            $window = ($window >> 8) | (($window & 0xff) << 8);
+                            printf("INNER-TCP: seq %lu ack_seq %lu doff %d win %d\n", $seq, $ack_seq, ($in_tcph->flags2_doff >> 4), $window);
+                            $tcp_flags = $in_tcph->flags1;
+                            printf("INNER-TCP: flags %s%s%s%s%s\n", ($tcp_flags & 0x2) ? "S" : "-", ($tcp_flags & 0x10) ? "A" : "-", ($tcp_flags & 0x8) ? "P" : "-", ($tcp_flags & 0x1) ? "F" : "-", ($tcp_flags & 0x4) ? "R" : "-");
+                        }
+                    }
+                    @hits["recv:filtered"] = count();
+                }
+            }
+        }
+        @hits["recv"] = count();
+    }'

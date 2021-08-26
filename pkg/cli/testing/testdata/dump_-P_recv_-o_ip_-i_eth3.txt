@@ -1,0 +1,47 @@
+sudo BPFTRACE_STRLEN=80 bpftrace -e '
+    #include <linux/skbuff.h>
+    #include <linux/types.h>
+    #include <linux/netdevice.h>
+
+    struct iphdr {
+        struct {
+            uint8_t ihl_version;
+            uint8_t tos;
+            uint16_t tot_len;
+            uint16_t id;
+            uint16_t frag_off;
+            uint8_t ttl;
+            uint8_t protocol;
+            uint16_t check;
+            uint32_t saddr;
+            uint32_t daddr;
+        } __attribute__((packed));
+    }
+
+    interval:s:60 {
+        exit();
+    }
+
+    kprobe:netif_receive_skb_internal {
+        $skb = (sk_buff*) arg0;
+        $netdev = $skb->dev;
+        if ($netdev->name == "eth3") {
+            $iph = (iphdr*) ($skb->head + $skb->network_header);
+            if ($iph->ihl_version == 0x45) {
+                time("%H:%M:%S.");
+                printf("%09ld - kprobe:netif_receive_skb_internal\n", nsecs % 1000000000);
+                $tot_len = $iph->tot_len;
+                $tot_len = ($tot_len >> 8) | (($tot_len & 0xff) << 8);
+                $frag_off = $iph->frag_off;
+                $frag_off = ($frag_off >> 8) | (($frag_off & 0xff) << 8);
+                $check = $iph->check;
+                $check = ($check >> 8) | (($check & 0xff) << 8);
+                printf("IP: ihl/ver %x tot_len %d frag_off %d (%s %s) check %x\n", $iph->ihl_version, $tot_len, ($frag_off & 0x1fff) * 8, ($frag_off & 0x2000) ? "MF" : "-", ($frag_off & 0x4000) ? "DF" : "-", $check);
+                $id = $iph->id;
+                $id = ($id >> 8) | (($id & 0xff) << 8);
+                printf("IP: id %d ttl %d protocol %d saddr %s daddr %s\n", $id, $iph->ttl, $iph->protocol, ntop(2, $iph->saddr), ntop(2, $iph->daddr));
+            }
+            @hits["recv:filtered"] = count();
+        }
+        @hits["recv"] = count();
+    }'
