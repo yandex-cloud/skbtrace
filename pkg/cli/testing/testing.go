@@ -40,7 +40,7 @@ func (d *testDeps) GuessUnderlayDeviceFilters(itfName string) ([]*skbtrace.Filte
 func RunCommandTest(t *testing.T, args []string) {
 	cmdlineStr := strings.Join(args, "_")
 	errorMsg := fmt.Sprintf("Error in test for command %s", cmdlineStr)
-	for _, punct := range []string{"/", ":", " "} {
+	for _, punct := range []string{"/", ":", " ", ">"} {
 		cmdlineStr = strings.ReplaceAll(cmdlineStr, punct, "_")
 	}
 
