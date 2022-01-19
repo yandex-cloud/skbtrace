@@ -8,6 +8,8 @@ It can be used to:
 
 An example of such routine is `kfree_skb` which is called when kernel frees (drops) packet.
 
+[![Go Reference](https://pkg.go.dev/badge/github.com/yandex-cloud/skbtrace.svg)](https://pkg.go.dev/github.com/yandex-cloud/skbtrace)
+
 #### Usage
 
 For the usage examples see [Usage](USAGE.md)
