@@ -45,7 +45,7 @@ func (b *Builder) deduceFilterObjects(boSet builderObjectSet, filters [][]*Proce
 	}
 }
 
-// resolveWeakAliasFrefs resolves field references in processed filters which do not have
+// resolveWeakAliasRefs resolves field references in processed filters which do not have
 // pointer to FieldGroup for filters which use fields with field aliases for which
 // source object is not known due to weak aliasing logic. boSet contains set of objects
 // which will be produced in this trace script due to dump rows, other filters, keys, etc.
