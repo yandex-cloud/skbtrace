@@ -36,7 +36,13 @@ func ConvNtohs(obj, field string) ([]Statement, Expression) {
 
 // Field preprocessor for ntohs values
 func FppNtohs(op, value string) (string, error) {
-	uintValue, err := strconv.ParseUint(value, 10, 16)
+	base := 10
+	if len(value) > 2 && value[:2] == "0x" {
+		value = value[2:]
+		base = 16
+	}
+
+	uintValue, err := strconv.ParseUint(value, base, 16)
 	if err != nil {
 		return "", err
 	}

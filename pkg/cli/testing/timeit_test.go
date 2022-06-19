@@ -15,10 +15,11 @@ func TestTimeTest(t *testing.T) {
 		{"timeit", "from", "-k", "src,dst", "to", "aggr", "5s"},
 
 		// Forwarding test
-		{"timeit", "forward", "--ingress", "-i", "tapxx-1", "-p", "tcp"},
+		{"timeit", "forward", "--inbound", "-i", "tapxx-1", "-p", "tcp"},
 
 		// TCP test
-		{"timeit", "tcp", "handshake", "--ingress", "-i", "tapxx-1"},
+		{"timeit", "tcp", "handshake", "--inbound", "-i", "tapxx-1"},
+		{"timeit", "tcp", "lifetime", "--outbound"},
 	} {
 		RunCommandTest(t, args)
 	}

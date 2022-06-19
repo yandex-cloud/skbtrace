@@ -37,20 +37,6 @@ sudo BPFTRACE_STRLEN=80 bpftrace -e '
         exit();
     }
 
-    kprobe:netif_receive_skb_internal {
-        $skb = (sk_buff*) arg0;
-        $netdev = $skb->dev;
-        if ($netdev->name == "eth1") {
-            $in_iph = (iphdr*) ($skb->head + $skb->mac_header + 42);
-            if ($in_iph->ihl_version == 0x45) {
-                if ($in_iph->protocol == 6) {
-                    $in_tcph = (tcphdr*) ($skb->head + $skb->mac_header + 42 + 20);
-                    @start_time[$in_iph->saddr, $in_iph->daddr, $in_tcph->source, $in_tcph->dest, $in_tcph->seq] = nsecs;
-                }
-            }
-        }
-    }
-
     kprobe:dev_queue_xmit {
         $skb = (sk_buff*) arg0;
         $netdev = $skb->dev;
@@ -59,11 +45,24 @@ sudo BPFTRACE_STRLEN=80 bpftrace -e '
             if ($iph->ihl_version == 0x45) {
                 if ($iph->protocol == 6) {
                     $tcph = (tcphdr*) ($skb->head + $skb->network_header + 20);
-                    $st = @start_time[$iph->saddr, $iph->daddr, $tcph->source, $tcph->dest, $tcph->seq];
-                    if ($st > 0) {
-                        $dt = (nsecs - $st);
-                        @ = hist($dt / 1000);
-                        delete(@start_time[$iph->saddr, $iph->daddr, $tcph->source, $tcph->dest, $tcph->seq]);
+                    if (($tcph->flags1 & 0x17) == 0x2) {
+                        @start_time[$iph->saddr, $iph->daddr, $tcph->source, $tcph->dest] = nsecs;
+                    }
+                }
+            }
+        }
+        if ($netdev->name == "tapxx-1") {
+            $iph = (iphdr*) ($skb->head + $skb->network_header);
+            if ($iph->ihl_version == 0x45) {
+                if ($iph->protocol == 6) {
+                    $tcph = (tcphdr*) ($skb->head + $skb->network_header + 20);
+                    if (($tcph->flags1 & 0x17) == 0x10) {
+                        $st = @start_time[$iph->saddr, $iph->daddr, $tcph->source, $tcph->dest];
+                        if ($st > 0) {
+                            $dt = (nsecs - $st);
+                            @ = hist($dt / 1000);
+                            delete(@start_time[$iph->saddr, $iph->daddr, $tcph->source, $tcph->dest]);
+                        }
                     }
                 }
             }

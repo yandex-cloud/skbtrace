@@ -6,7 +6,6 @@ import (
 
 	"github.com/spf13/cobra"
 	"github.com/spf13/pflag"
-
 	"github.com/yandex-cloud/skbtrace"
 	"github.com/yandex-cloud/skbtrace/pkg/skb"
 	"github.com/yandex-cloud/skbtrace/pkg/stringutil"
@@ -16,8 +15,8 @@ type forwardOptions struct {
 	filterOptions   skbtrace.FilterOptions
 	itfNames        []string
 	underlayItfName string
-	isIngress       bool
-	isEgress        bool
+	isInbound       bool
+	isOutbound      bool
 }
 
 var (
@@ -65,15 +64,15 @@ func handleForwardFiltersInterface(
 	var encapOpt bool
 	var itfFilter []*skbtrace.Filter
 
-	if fwdOpts.isIngress || fwdOpts.isEgress {
-		// -i ITF1 --ingress - ingress to a VM
-		// -i ITF1 --egress  - egress from a VM
+	if fwdOpts.isInbound || fwdOpts.isOutbound {
+		// -i ITF1 --inbound   - ingress to a VM
+		// -i ITF1 --outbound  - egress from a VM
 		if len(fwdOpts.itfNames) != 1 {
 			return wrapError(forwardUsageError)
 		}
 
 		itfName := fwdOpts.itfNames[0]
-		if fwdOpts.isIngress {
+		if fwdOpts.isInbound {
 			switch probe {
 			case skb.ProbeRecv:
 				itfFilter, err = buildUnderlayFilter(ctx, itfName, fwdOpts.underlayItfName)
@@ -81,7 +80,7 @@ func handleForwardFiltersInterface(
 			case skb.ProbeXmit:
 				itfFilter, err = buildInterfaceFilter(ctx, itfName)
 			}
-		} else if fwdOpts.isEgress {
+		} else if fwdOpts.isOutbound {
 			switch probe {
 			case skb.ProbeRecv:
 				itfFilter, err = buildInterfaceFilter(ctx, itfName)
@@ -137,11 +136,11 @@ func buildForwardKeys(encapOpt bool, commonOpts *skbtrace.CommonOptions) (keys [
 	return
 }
 
-func registerDirectionFlags(flags *pflag.FlagSet, ingressPtr, egressPtr *bool) {
-	flags.BoolVar(ingressPtr, "ingress", false,
-		"Direction is ingress (towards specified interface)")
-	flags.BoolVar(egressPtr, "egress", false,
-		"Direction is egress (from specified interface)")
+func registerDirectionFlags(flags *pflag.FlagSet, inboundPtr, outboundPtr *bool) {
+	flags.BoolVar(inboundPtr, "inbound", false,
+		"Direction is inbound (towards specified interface)")
+	flags.BoolVar(inboundPtr, "outbound", false,
+		"Direction is outboun (from specified interface)")
 }
 
 func registerForwardOptions(flags *pflag.FlagSet, opts *forwardOptions) {
@@ -150,6 +149,6 @@ func registerForwardOptions(flags *pflag.FlagSet, opts *forwardOptions) {
 			` egress interface in local forwarding.`)
 	flags.StringVarP(&opts.underlayItfName, "underlay-iface", "u", defaultUnderlayDevice,
 		`Default underlay device used if it cannot be guessed`)
-	registerDirectionFlags(flags, &opts.isIngress, &opts.isEgress)
+	registerDirectionFlags(flags, &opts.isInbound, &opts.isOutbound)
 	RegisterFilterOptions(flags, &opts.filterOptions)
 }

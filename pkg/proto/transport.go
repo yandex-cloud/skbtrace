@@ -7,9 +7,8 @@ import (
 	"strconv"
 	"strings"
 
-	"github.com/yandex-cloud/skbtrace/pkg/skb"
-
 	"github.com/yandex-cloud/skbtrace"
+	"github.com/yandex-cloud/skbtrace/pkg/skb"
 )
 
 const (
@@ -155,7 +154,7 @@ func fppTcpFlags(op, value string) (string, error) {
 			}
 		}
 		if chrMask == 0 {
-			return "", fmt.Errorf("unknown TCP flag mnemonic '%r'", chr)
+			return "", fmt.Errorf("unknown TCP flag mnemonic '%c'", rune(chr))
 		}
 		mask |= chrMask
 	}

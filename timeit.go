@@ -370,7 +370,7 @@ func (b *Builder) buildTimeProbe(
 	}
 
 	var sharedFilters bool
-	if len(spec.Filters) > 0 {
+	if len(spec.Filters) > 0 || len(spec.RawFilters) > 0 {
 		ctx.filters, err = b.prepareFilters(spec.FilterOptions)
 		if err != nil {
 			return

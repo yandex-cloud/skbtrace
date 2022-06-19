@@ -11,7 +11,7 @@ const (
 
 	// Filter value. Supports dotted notation and some string constants
 	// for field preprocessors
-	reFilterValueGroup = "([A-Za-z0-9.:|]*)"
+	reFilterValueGroup = "([\"]?[A-Za-z0-9.:|]*[\"]?)"
 )
 
 var reFilter = regexp.MustCompile("^" + strings.Join(
@@ -33,7 +33,7 @@ type FilterOptions struct {
 type ProcessedFilter struct {
 	Filter
 
-	fref *fieldAliasRef
+	frefs []*fieldAliasRef
 }
 
 type weakAliasFieldRef struct {
@@ -44,13 +44,19 @@ func (f *Filter) fieldIdent() string {
 	return string(ExprField(f.Object, f.Field))
 }
 
-func (f *Filter) withField(fref *fieldAliasRef) *ProcessedFilter {
+func (f *Filter) withFields(frefs []*fieldAliasRef) *ProcessedFilter {
 	newFilter := &ProcessedFilter{Filter: *f}
-	if fref.fg != nil {
-		newFilter.Object = fref.fg.Object
+	if frefs[0].fg != nil {
+		newFilter.Object = frefs[0].fg.Object
 	}
-	newFilter.Field = fref.field.Name
-	newFilter.fref = fref
+
+	var fieldNames []string
+	for _, fref := range frefs {
+		fieldNames = append(fieldNames, fref.field.Name)
+	}
+	newFilter.Field = strings.Join(fieldNames, "|")
+
+	newFilter.frefs = frefs
 	return newFilter
 }
 
@@ -99,13 +105,32 @@ func (b *Builder) parseFilter(rawFilter string) ([]*ProcessedFilter, error) {
 }
 
 func (b *Builder) processFilter(filter *Filter) ([]*ProcessedFilter, error) {
-	fref := b.findField(filter.Object, filter.Field)
-	if fref == nil {
-		return nil, newErrorf(ErrLevelFilter, filter.fieldIdent(), nil,
-			"not found field used by filter")
+	objects := strings.Split(filter.Object, "|")
+	fields := strings.Split(filter.Field, "|")
+
+	var frefs []*fieldAliasRef
+	for _, obj := range objects {
+		for _, field := range fields {
+			fref := b.findField(obj, field)
+			if fref == nil {
+				return nil, newErrorf(ErrLevelFilter, filter.fieldIdent(), nil,
+					"not found field used by filter")
+			}
+
+			frefs = append(frefs, fref)
+		}
 	}
 
-	pf := filter.withField(fref)
+	baseFref := frefs[0]
+	for _, fref := range frefs[1:] {
+		if baseFref.fg != fref.fg {
+			return nil, newErrorf(ErrLevelFilter, filter.fieldIdent(), nil,
+				"cannot use field refs from different objects '%s' and '%s'",
+				baseFref.fg.Object, fref.fg.Object)
+		}
+	}
+
+	pf := filter.withFields(frefs)
 	return []*ProcessedFilter{pf}, nil
 }
 
@@ -116,7 +141,8 @@ func (b *Builder) processFieldSanityFilters(obj string) []*ProcessedFilter {
 		if fref.field.SanityFilter == nil {
 			continue
 		}
-		sanityFilters = append(sanityFilters, fref.field.SanityFilter.withField(fref))
+		sanityFilters = append(sanityFilters,
+			fref.field.SanityFilter.withFields([]*fieldAliasRef{fref}))
 	}
 
 	return sanityFilters
@@ -132,38 +158,44 @@ func (b *Builder) addFilterBlock(
 
 	var conditions []Expression
 	for _, filter := range filters {
-		fref, field := filter.fref, filter.fref.field
-		filterStmts, expr, err := b.generateFieldExpression(fref.fg, field, block.probe, ConverterFilter)
-		if err != nil {
-			return nil, newErrorf(ErrLevelFilter, filter.fieldIdent(), err,
-				"error generating field expression in filter")
-		}
+		var exprs []Expression
+		for _, fref := range filter.frefs {
+			stmts, expr, err := b.generateFieldExpression(fref.fg, fref.field, block.probe, ConverterFilter)
+			if err != nil {
+				return nil, newErrorf(ErrLevelFilter, filter.fieldIdent(), err,
+					"error generating field expression in filter")
+			}
 
-		block.Add(filterStmts...)
+			block.Add(stmts...)
+			exprs = append(exprs, expr)
+		}
 
 		var condExprList []Expression
 		for _, value := range strings.Split(filter.Value, "|") {
-			if filter.fref.field.Preprocessor != nil {
-				// Preprocess human-readable value
-				preprocessedValue, err := filter.fref.field.Preprocessor(filter.Op, filter.Value)
-				if err != nil {
-					return nil, newErrorf(ErrLevelFilter, filter.fieldIdent(), err,
-						"error preprocessing value")
+			for i, fref := range filter.frefs {
+				fieldValue := value
+				if fref.field.Preprocessor != nil {
+					// Preprocess human-readable value
+					preprocessedValue, err := fref.field.Preprocessor(filter.Op, value)
+					if err != nil {
+						return nil, newErrorf(ErrLevelFilter, filter.fieldIdent(), err,
+							"error preprocessing value")
+					}
+					fieldValue = preprocessedValue
 				}
-				value = preprocessedValue
-			}
 
-			var condExpr Expression
-			if field.FilterOperator != nil {
-				condExpr, err = field.FilterOperator(expr, filter.Op, value)
-				if err != nil {
-					return nil, newErrorf(ErrLevelFilter, filter.fieldIdent(), err,
-						"error in filter operator")
+				if fref.field.FilterOperator != nil {
+					condExpr, err := fref.field.FilterOperator(exprs[i], filter.Op, fieldValue)
+					if err != nil {
+						return nil, newErrorf(ErrLevelFilter, filter.fieldIdent(), err,
+							"error in filter operator")
+					}
+					condExprList = append(condExprList, condExpr)
+				} else {
+					condExprList = append(condExprList,
+						Exprf("%s %s %s", exprs[i], filter.Op, fieldValue))
 				}
-			} else {
-				condExpr = Exprf("%s %s %s", expr, filter.Op, value)
 			}
-			condExprList = append(condExprList, condExpr)
 		}
 		conditions = append(conditions, ExprJoinOp(condExprList, "||"))
 	}
@@ -175,8 +207,10 @@ func (b *Builder) getFilterWeakRefs(filters [][]*ProcessedFilter) []weakAliasRef
 	weakRefs := make([]weakAliasRef, 0)
 	for _, filterChunk := range filters {
 		for _, filter := range filterChunk {
-			if filter.fref.weakGroups != nil {
-				weakRefs = append(weakRefs, &weakAliasFieldRef{filter})
+			for _, fref := range filter.frefs {
+				if fref.weakGroups != nil {
+					weakRefs = append(weakRefs, &weakAliasFieldRef{filter})
+				}
 			}
 		}
 	}
@@ -184,7 +218,8 @@ func (b *Builder) getFilterWeakRefs(filters [][]*ProcessedFilter) []weakAliasRef
 }
 
 func (w *weakAliasFieldRef) Ref() *fieldAliasRef {
-	return w.filter.fref
+	// Since we have checked that all
+	return w.filter.frefs[0]
 }
 
 func (w *weakAliasFieldRef) Level() ErrorLevel {
@@ -192,6 +227,8 @@ func (w *weakAliasFieldRef) Level() ErrorLevel {
 }
 
 func (w *weakAliasFieldRef) Resolve(fg *FieldGroup) {
-	w.filter.fref.Resolve(fg)
+	for _, fref := range w.filter.frefs {
+		fref.Resolve(fg)
+	}
 	w.filter.Object = fg.Object
 }

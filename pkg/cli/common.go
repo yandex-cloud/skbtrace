@@ -2,11 +2,11 @@ package cli
 
 import (
 	"fmt"
+	"strings"
 	"time"
 
 	"github.com/spf13/cobra"
 	"github.com/spf13/pflag"
-
 	"github.com/yandex-cloud/skbtrace"
 	"github.com/yandex-cloud/skbtrace/pkg/skb"
 )
@@ -14,6 +14,30 @@ import (
 const (
 	defaultUnderlayDevice = "eth1"
 )
+
+// rawFilterSlice is a variant of stringSlice from cobra that doesn't use
+// CSV internally. This allows for CSV-incompatible arguments
+type rawFilterSlice struct {
+	value *[]string
+}
+
+func newRawFilterSliceValue(p *[]string) *rawFilterSlice {
+	rfsv := new(rawFilterSlice)
+	rfsv.value = p
+	return rfsv
+}
+
+func (rfsv *rawFilterSlice) Type() string { return "RawFilters" }
+func (rfsv *rawFilterSlice) String() string {
+	return strings.Join(*rfsv.value, " && ")
+}
+func (rfsv *rawFilterSlice) Set(s string) error {
+	rawFilters := strings.Split(s, "&&")
+	for _, rawFilter := range rawFilters {
+		*rfsv.value = append(*rfsv.value, strings.TrimSpace(rawFilter))
+	}
+	return nil
+}
 
 type timeModeValue struct {
 	tm *skbtrace.TimeMode
@@ -72,7 +96,7 @@ func RegisterCommonDumpOptions(flags *pflag.FlagSet, opt *skbtrace.CommonDumpOpt
 }
 
 func RegisterFilterOptions(flags *pflag.FlagSet, options *skbtrace.FilterOptions) {
-	flags.StringSliceVarP(&options.RawFilters, "filter", "F", nil,
+	flags.VarP(newRawFilterSliceValue(&options.RawFilters), "filter", "F",
 		`Filters. Use 'fields' subcommand to list available fields.`)
 }
 

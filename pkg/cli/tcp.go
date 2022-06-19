@@ -5,15 +5,14 @@ import (
 
 	"github.com/spf13/cobra"
 	"github.com/spf13/pflag"
-
 	"github.com/yandex-cloud/skbtrace"
 	"github.com/yandex-cloud/skbtrace/pkg/skb"
 )
 
 type tcpOptions struct {
 	filterOpts skbtrace.FilterOptions
-	isIngress  bool
-	isEgress   bool
+	isInbound  bool
+	isOutbound bool
 	isUnderlay bool
 }
 
@@ -45,8 +44,8 @@ var BaseTcpCommand = &CommandProducer{
 
 var TcpHandshakeCommand = &CommandProducer{
 	Base: &cobra.Command{
-		Use:     "handshake {--ingress|--egress} [--underlay] -i ITF",
-		Example: "handshake --ingress -i tapxx-0 -6",
+		Use:     "handshake {--inbound|--outbound} [--underlay] -i ITF",
+		Example: "handshake --inbound -i tapxx-0 -6",
 		Short:   "Measures time for TCP handshake",
 	},
 	TimeVisitor: func(ctx *VisitorContext, cmd *cobra.Command, opts *skbtrace.TimeCommonOptions) {
@@ -62,7 +61,7 @@ var TcpHandshakeCommand = &CommandProducer{
 
 var TcpLifetimeCommand = &CommandProducer{
 	Base: &cobra.Command{
-		Use:   "lifetime",
+		Use:   "lifetime {--inbound|--outbound}",
 		Short: "Measures TCP connection lifetime from SYN to FIN/RST in the same direction",
 	},
 	TimeVisitor: func(ctx *VisitorContext, cmd *cobra.Command, opts *skbtrace.TimeCommonOptions) {
@@ -104,17 +103,17 @@ func buildTcpTimeOptions(opts *tcpOptions, commonOpts *skbtrace.TimeCommonOption
 	keys := tcpKeysBase
 	hints := []string{"tcp"}
 	if opts.isUnderlay {
-		if opts.isIngress {
+		if opts.isInbound {
 			probeName = skb.ProbeRecv
-		} else if opts.isEgress {
+		} else if opts.isOutbound {
 			probeName = skb.ProbeXmit
 		}
 		keys = wrapEncap(keys)
 		hints = wrapEncap(hints)
 	} else {
-		if opts.isIngress {
+		if opts.isInbound {
 			probeName = skb.ProbeXmit
-		} else if opts.isEgress {
+		} else if opts.isOutbound {
 			probeName = skb.ProbeRecv
 		}
 	}
@@ -141,5 +140,5 @@ func registerTcpOptions(flags *pflag.FlagSet, opts *tcpOptions) {
 	RegisterFilterOptions(flags, &opts.filterOpts)
 	flags.BoolVar(&opts.isUnderlay, "underlay", false,
 		"Capture TCP in underlay interface.")
-	registerDirectionFlags(flags, &opts.isIngress, &opts.isEgress)
+	registerDirectionFlags(flags, &opts.isInbound, &opts.isOutbound)
 }

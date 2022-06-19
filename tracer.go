@@ -170,7 +170,7 @@ func (b *Builder) wrapFilter(
 ) (*Block, error) {
 	// The only case for multiple filters are arrays, so assume
 	// that both filters use same object
-	block, err := b.getBlockWithObject(block, filterChunk[0].fref.fg.Object)
+	block, err := b.getBlockWithObject(block, filterChunk[0].frefs[0].fg.Object)
 	if err != nil {
 		return nil, err
 	}

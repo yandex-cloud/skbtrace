@@ -9,8 +9,8 @@ import (
 const (
 	// Either an object name starting with dollar sign (i.e. $)
 	// or a global variable/field alias (latter might have dashes)
-	reFieldObjGroup    = "([$]\\w+|[0-9a-z_-]+)"
-	reFieldFieldGroups = "(?:->)?(\\w+)?"
+	reFieldObjGroup    = "([$]\\w+|[0-9a-z_\\-|]+)"
+	reFieldFieldGroups = "(?:->)?([0-9a-z_\\->.|]+)?"
 )
 
 var reField = regexp.MustCompile("^" + reFieldObjGroup + reFieldFieldGroups + "$")

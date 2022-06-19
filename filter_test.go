@@ -15,7 +15,9 @@ var taskFields = []*FieldGroup{
 var ipFields = []*FieldGroup{
 	{Row: "task", Object: "$iph", Fields: []*Field{
 		{Name: "ttl"},
-		{Name: "saddr", Alias: "src", Preprocessor: fppPtonInet}}},
+		{Name: "field.subfield"},
+		{Name: "saddr", Alias: "src", Preprocessor: fppPtonInet},
+		{Name: "daddr", Alias: "dst", Preprocessor: fppPtonInet}}},
 }
 
 func fppPtonInet(op, value string) (string, error) {
@@ -38,6 +40,14 @@ func TestFilterParse(t *testing.T) {
 		assert.Equal(t, Filter{"$iph", "ttl", ">=", "50"}, f[0].Filter)
 	})
 
+	t.Run("ComplexFilter", func(t *testing.T) {
+		f, err := b.parseFilter("$iph->field.subfield == 12")
+		require.NoError(t, err)
+		require.Len(t, f, 1)
+
+		assert.Equal(t, Filter{"$iph", "field.subfield", "==", "12"}, f[0].Filter)
+	})
+
 	t.Run("AliasFilter", func(t *testing.T) {
 		f, err := b.parseFilter("src == 127.0.0.1")
 		require.NoError(t, err)
@@ -49,6 +59,17 @@ func TestFilterParse(t *testing.T) {
 		block2, err := b.addFilterBlock(prog.AddIntervalBlock(time.Second), f)
 
 		assert.Equal(t, "if ($iph->saddr == 0x100007f)", block2.Preamble)
+	})
+
+	t.Run("AliasEitherFilter", func(t *testing.T) {
+		f, err := b.parseFilter("src|dst == 127.0.0.1")
+		require.NoError(t, err)
+		require.Len(t, f, 1)
+
+		prog := NewProgram()
+		block2, err := b.addFilterBlock(prog.AddIntervalBlock(time.Second), f)
+
+		assert.Equal(t, "if ($iph->saddr == 0x100007f || $iph->daddr == 0x100007f)", block2.Preamble)
 	})
 
 	t.Run("PIDFilter", func(t *testing.T) {
