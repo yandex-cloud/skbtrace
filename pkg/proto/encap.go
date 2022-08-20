@@ -6,9 +6,8 @@ import (
 	"fmt"
 	"strconv"
 
-	"github.com/yandex-cloud/skbtrace/pkg/skb"
-
 	"github.com/yandex-cloud/skbtrace"
+	"github.com/yandex-cloud/skbtrace/pkg/skb"
 )
 
 const (
@@ -43,30 +42,30 @@ var encapFieldGroups = []*skbtrace.FieldGroup{
 var encapObj = []*skbtrace.Object{
 	{Variable: ObjIpHdrOuter, HeaderFiles: headerFiles, StructDefs: []string{"iphdr"},
 		Casts: map[string]string{
-			"$skb": skb.NewDataCastBuilder("iphdr").SetOuterOffset(EthHdrLength).Build(),
+			"$skb": skb.NewDataCastBuilder("iphdr", "head").SetOuterOffset(EthHdrLength).Build(),
 		}},
 }
 
 var encapGreObj = []*skbtrace.Object{
 	{Variable: ObjMplsHdrOuter, HeaderFiles: headerFiles, StructDefs: []string{"mplshdr"},
-		SanityFilter: newTransportSanityFilter(ObjIpHdrOuter, GreProtocolNumber),
+		SanityFilter: NewTransportSanityFilter(ObjIpHdrOuter, GreProtocolNumber),
 		Casts: map[string]string{
-			"$skb": skb.NewDataCastBuilder("mplshdr").SetOuterOffset(
+			"$skb": skb.NewDataCastBuilder("mplshdr", "head").SetOuterOffset(
 				EthHdrLength + IpHdrMinLength + GreHdrLength).Build(),
 		}},
 }
 
 var encapUdpObj = []*skbtrace.Object{
 	{Variable: ObjUdpHdrOuter, HeaderFiles: headerFiles, StructDefs: []string{"udphdr"},
-		SanityFilter: newTransportSanityFilter(ObjIpHdrOuter, UdpProtocolNumber),
+		SanityFilter: NewTransportSanityFilter(ObjIpHdrOuter, UdpProtocolNumber),
 		Casts: map[string]string{
-			"$skb": skb.NewDataCastBuilder("udphdr").SetOuterOffset(EthHdrLength + IpHdrMinLength).Build(),
+			"$skb": skb.NewDataCastBuilder("udphdr", "head").SetOuterOffset(EthHdrLength + IpHdrMinLength).Build(),
 		}},
 	{Variable: ObjMplsHdrOuter, HeaderFiles: headerFiles, StructDefs: []string{"mplshdr"},
 		SanityFilter: skbtrace.Filter{Object: ObjUdpHdrOuter, Field: "dest",
 			Op: "==", Value: strconv.Itoa(MplsOverUdpPort)},
 		Casts: map[string]string{
-			"$skb": skb.NewDataCastBuilder("mplshdr").SetOuterOffset(
+			"$skb": skb.NewDataCastBuilder("mplshdr", "head").SetOuterOffset(
 				EthHdrLength + IpHdrMinLength + UdpHdrLength).Build(),
 		}},
 }

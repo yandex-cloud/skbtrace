@@ -54,10 +54,18 @@ var fieldsSkb = []*skbtrace.FieldGroup{
 		{Name: "size", FmtKey: "size"},
 	}},
 
+	{Object: "$skbsi", Row: "gso", Fields: []*skbtrace.Field{
+		{Name: "nr_frags"},
+		{Name: "gso_size"},
+		{Name: "gso_segs"},
+		{Name: "gso_type"},
+	}},
+
 	{Object: "$netdev", Row: "netdev", Fields: []*skbtrace.Field{
 		{Name: "name", Alias: DevNameAlias, FmtSpec: "%s"},
 		{Name: "mtu"},
-		{Name: "state", FmtSpec: "%x"}}},
+		{Name: "state", FmtSpec: "%x"},
+		{Name: "features", FmtSpec: "%x"}}},
 }
 
 var objSkb = []*skbtrace.Object{
@@ -107,6 +115,8 @@ var probesSkb = []*skbtrace.Probe{
 		Help: "tcp_gro_receive() is called when GRO tries to merge sk buffs"},
 	{Name: "kprobe:tcp_gro_complete", Args: map[string]string{"skb": "arg0"},
 		Help: "tcp_gro_complete() is called when GRO finishes setting merged sk buff"},
+	{Name: "kprobe:__skb_gso_segment", Args: map[string]string{"skb": "arg0"},
+		Help: "__skb_gso_segment() is called when device decides to apply GSO to sk buff"},
 
 	// Some IPv4 probes
 	{Name: "kprobe:ip_rcv", Args: map[string]string{"skb": "arg0"}},
@@ -118,10 +128,11 @@ type DataCastBuilder struct {
 	fieldSet bool
 }
 
-func NewDataCastBuilder(structType string) *DataCastBuilder {
+func NewDataCastBuilder(structType, headField string) *DataCastBuilder {
 	buf := bytes.NewBufferString("{{ .Dst }} = ({{ StructKeyword }}")
 	buf.WriteString(structType)
-	buf.WriteString("*) ({{ .Src }}->head")
+	buf.WriteString("*) ({{ .Src }}->")
+	buf.WriteString(headField)
 
 	return &DataCastBuilder{buf: buf}
 }
