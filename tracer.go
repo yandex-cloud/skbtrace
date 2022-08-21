@@ -28,6 +28,10 @@ type CommonOptions struct {
 type TraceCommonOptions struct {
 	CommonOptions
 
+	ContextProbeNames    []string
+	ContextFilterOptions FilterOptions
+	ContextKey           string
+
 	ProbeNames []string
 	FilterOptions
 }
@@ -81,24 +85,66 @@ func (b *Builder) buildTracerImpl(
 	prog := NewProgram()
 	prog.addCommonBlock(&opt.CommonOptions)
 
-	for _, probeName := range opt.ProbeNames {
-		probeBlock, block, err := b.addProbeBlock(prog, probeName, filters)
+	if len(opt.ContextProbeNames) > 0 {
+		traceFlagExpr := Exprf("@trace_flag[%s]", opt.ContextKey)
+		innerBuilder := builder
+		builder = func(block *Block) error {
+			innerBlock := block.AddIfBlock(traceFlagExpr)
+			return innerBuilder(innerBlock)
+		}
+
+		contextFilters, err := b.prepareFilters(opt.ContextFilterOptions)
 		if err != nil {
 			return nil, err
 		}
 
-		err = builder(block)
-		if err != nil {
-			return nil, newProbeBuildError(probeName, err)
-		}
+		for _, probeName := range opt.ContextProbeNames {
+			if err = b.buildTracerProbe(prog, probeName, false, contextFilters, true, func(block *Block) error {
+				block.Addf("%s = 1", traceFlagExpr)
+				return nil
+			}); err != nil {
+				return nil, err
+			}
 
-		// Add diagnostic of number of times the probe was hit.
-		// Will be printed on exit like any other global array
-		block.Addf(`@hits["%s:filtered"] = count()`, probeName)
-		probeBlock.Addf(`@hits["%s"] = count()`, probeName)
+			if err = b.buildTracerProbe(prog, probeName, true, nil, false, func(block *Block) error {
+				block.Addf("delete(%s)", traceFlagExpr)
+				return nil
+			}); err != nil {
+				return nil, err
+			}
+		}
+	}
+
+	for _, probeName := range opt.ProbeNames {
+		if err = b.buildTracerProbe(prog, probeName, false, filters, true, builder); err != nil {
+			return nil, err
+		}
 	}
 
 	return prog, nil
+}
+
+func (b *Builder) buildTracerProbe(
+	prog *Program, probeName string, isReturn bool, filters [][]*ProcessedFilter,
+	countHits bool, builder func(block *Block) error,
+) error {
+	probeBlock, block, err := b.addProbeBlock(prog, probeName, isReturn, filters)
+	if err != nil {
+		return err
+	}
+
+	err = builder(block)
+	if err != nil {
+		return newProbeBuildError(probeName, err)
+	}
+
+	// Add diagnostic of number of times the probe was hit.
+	// Will be printed on exit like any other global array
+	if countHits {
+		block.Addf(`@hits["%s:filtered"] = count()`, probeName)
+		probeBlock.Addf(`@hits["%s"] = count()`, probeName)
+	}
+	return nil
 }
 
 // BuildDumpTrace builds a tracer where each probe prints known fields

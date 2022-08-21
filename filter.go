@@ -11,7 +11,7 @@ const (
 
 	// Filter value. Supports dotted notation and some string constants
 	// for field preprocessors
-	reFilterValueGroup = "([\"]?[A-Za-z0-9.:|]*[\"]?)"
+	reFilterValueGroup = "([A-Za-z0-9.:|]*|\"[^\"]*\")"
 )
 
 var reFilter = regexp.MustCompile("^" + strings.Join(

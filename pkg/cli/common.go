@@ -13,6 +13,7 @@ import (
 
 const (
 	defaultUnderlayDevice = "eth1"
+	defaultContextKey     = "tid"
 )
 
 // rawFilterSlice is a variant of stringSlice from cobra that doesn't use
@@ -103,6 +104,15 @@ func RegisterFilterOptions(flags *pflag.FlagSet, options *skbtrace.FilterOptions
 func RegisterTracerProbeOptions(flags *pflag.FlagSet, opts *skbtrace.TraceCommonOptions) {
 	flags.StringSliceVarP(&opts.ProbeNames, "probe", "P", nil,
 		`Probe names to generate. Use 'probes' subcommand to list available probes.`)
+}
+
+func RegisterTracerContextOptions(flags *pflag.FlagSet, opts *skbtrace.TraceCommonOptions) {
+	flags.StringSliceVarP(&opts.ContextProbeNames, "context-probe", "C", nil,
+		`Probe names that trigger normal probe execution. Use 'probes' subcommand to list available probes.`)
+	flags.Var(newRawFilterSliceValue(&opts.ContextFilterOptions.RawFilters), "context-filter",
+		`Filters. Use 'fields' subcommand to list available fields.`)
+	flags.StringVar(&opts.ContextKey, "context-key", defaultContextKey,
+		`Key to be used to map context probe firings to normal probe firings`)
 }
 
 func RegisterInterfaceOptions(

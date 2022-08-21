@@ -6,7 +6,6 @@ import (
 
 	"github.com/spf13/cobra"
 	"github.com/spf13/pflag"
-
 	"github.com/yandex-cloud/skbtrace"
 )
 
@@ -20,6 +19,7 @@ func (producer *CommandProducer) addTracer(
 	var opts skbtrace.TraceCommonOptions
 	PassCommonOptions(ctx, cmd, &opts.CommonOptions, commonOpts)
 	RegisterTracerProbeOptions(cmd.Flags(), &opts)
+	RegisterTracerContextOptions(cmd.Flags(), &opts)
 	RegisterFilterOptions(cmd.Flags(), &opts.FilterOptions)
 	RegisterInterfaceOptions(ctx, cmd, &opts.FilterOptions)
 

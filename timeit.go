@@ -386,7 +386,7 @@ func (b *Builder) buildTimeProbe(
 	}
 
 	if spec.Probe != ctxBase.probeName || ctxBase.probeBlock == nil {
-		ctx.probeBlock, ctx.outerBlock, err = b.addProbeBlock(prog, spec.Probe, ctx.filters)
+		ctx.probeBlock, ctx.outerBlock, err = b.addProbeBlock(prog, spec.Probe, false, ctx.filters)
 	} else {
 		ctx.probeBlock = ctxBase.probeBlock
 		if !sharedFilters {
