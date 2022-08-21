@@ -52,9 +52,19 @@ type TraceDumpOptions struct {
 	CommonDumpOptions
 }
 
+type AggregateCommonOptions struct {
+	// Interval of aggregation map dumping
+	Interval time.Duration
+
+	// Truncate defines number of entries that should be printed when printing
+	// the aggregation if set to positive value
+	Truncate int
+}
+
 // Options for BuildAggregate
 type TraceAggregateOptions struct {
 	TraceCommonOptions
+	AggregateCommonOptions
 
 	// Aggregation Func and its argument (optional)
 	Func AggrFunc
@@ -62,9 +72,6 @@ type TraceAggregateOptions struct {
 
 	// Keys for aggregation map entry. Optionally, probe name may be added
 	Keys []string
-
-	// Interval of aggregation map dumping
-	Interval time.Duration
 }
 
 func (b *Builder) buildTracerImpl(
@@ -190,7 +197,7 @@ func (b *Builder) BuildAggregate(opt TraceAggregateOptions) (*Program, error) {
 		return nil, err
 	}
 
-	prog.addAggrDumpBlock(opt.Interval)
+	prog.addAggrDumpBlock(opt.Interval, opt.Truncate)
 	return prog, nil
 }
 
@@ -299,6 +306,7 @@ func (b *Builder) getTimeStatements(timeMode TimeMode) (
 		post = []Statement{Stmtf("@last_event = elapsed")}
 		fmtSpec = "+%ld"
 	case TMTime:
+		// FIXME: this is incorrect as nsecs is not supposed to be a wallclock
 		pre = []Statement{Stmt(`time("%H:%M:%S.")`)}
 		expr = "nsecs % 1000000000"
 		fmtSpec = "%09ld"

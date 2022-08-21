@@ -19,7 +19,8 @@ forward --ingress -i tapxx-0 -6
   -h, --help                    help for forward
   -i, --iface strings           Interface device name. Can be specified twice with second being egress interface in local forwarding.
       --inbound                 Direction is inbound (towards specified interface)
-      --outbound                Direction is outboun (from specified interface)
+      --nat                     Assume that NAT translation is applied, ignore src and/or dst.
+      --outbound                Direction is outbound (from specified interface)
   -u, --underlay-iface string   Default underlay device used if it cannot be guessed (default "eth1")
 ```
 

@@ -9,7 +9,8 @@ Measures tcp-related timings and outliers
   -h, --help                help for tcp
   -i, --iface string        Interface device name. Shortcut for '$netdev->name == "Device"' filter.
       --inbound             Direction is inbound (towards specified interface)
-      --outbound            Direction is outboun (from specified interface)
+      --nat                 Assume that NAT translation is applied, ignore src and/or dst.
+      --outbound            Direction is outbound (from specified interface)
       --underlay            Capture TCP in underlay interface.
 ```
 

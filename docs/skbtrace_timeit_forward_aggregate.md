@@ -9,7 +9,8 @@ skbtrace timeit forward aggregate [-f FUNC] [INTERVAL] [flags]
 ### Options
 
 ```
-  -h, --help   help for aggregate
+  -h, --help        help for aggregate
+  -t, --trunc int   Truncate aggregation print to N entries.
 ```
 
 ### Options inherited from parent commands
@@ -23,7 +24,8 @@ skbtrace timeit forward aggregate [-f FUNC] [INTERVAL] [flags]
   -i, --iface strings           Interface device name. Can be specified twice with second being egress interface in local forwarding.
       --inbound                 Direction is inbound (towards specified interface)
   -6, --inet6                   If specified, skbtrace assumes that inner header is IPv6.
-      --outbound                Direction is outboun (from specified interface)
+      --nat                     Assume that NAT translation is applied, ignore src and/or dst.
+      --outbound                Direction is outbound (from specified interface)
       --struct-keyword string   Use struct keyword in casts: "" - do not use, "struct" - use, "auto" - deduce based on bpftrace version. (default "auto")
   -T, --timeout duration        Execution timeout for resulting bpftrace script (default 1m0s)
   -u, --underlay-iface string   Default underlay device used if it cannot be guessed (default "eth1")

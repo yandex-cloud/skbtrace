@@ -25,6 +25,7 @@ aggregate -6 -P xmit -i eth1 -F 'inner-src == 2a02:6b8:...' -k outer-dst 2s
   -i, --iface string                Interface device name. Shortcut for '$netdev->name == "Device"' filter.
   -k, --key strings                 Keys to merge probe firings. Use 'fields' subcommand to list available fields.
   -P, --probe strings               Probe names to generate. Use 'probes' subcommand to list available probes.
+  -t, --trunc int                   Truncate aggregation print to N entries.
 ```
 
 ### Options inherited from parent commands

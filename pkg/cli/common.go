@@ -115,6 +115,11 @@ func RegisterTracerContextOptions(flags *pflag.FlagSet, opts *skbtrace.TraceComm
 		`Key to be used to map context probe firings to normal probe firings`)
 }
 
+func RegisterAggregateCommonOptions(flags *pflag.FlagSet, opts *skbtrace.AggregateCommonOptions) {
+	flags.IntVarP(&opts.Truncate, "trunc", "t", 0,
+		`Truncate aggregation print to N entries.`)
+}
+
 func RegisterInterfaceOptions(
 	ctx *VisitorContext, cmd *cobra.Command, options *skbtrace.FilterOptions,
 ) {

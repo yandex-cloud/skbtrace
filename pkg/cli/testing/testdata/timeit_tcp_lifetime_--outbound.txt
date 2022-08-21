@@ -36,7 +36,7 @@ sudo BPFTRACE_STRLEN=80 bpftrace -e '
         exit();
     }
 
-    kprobe:dev_queue_xmit {
+    kprobe:netif_receive_skb_internal {
         $skb = (sk_buff*) arg0;
         $iph = (iphdr*) ($skb->head + $skb->network_header);
         if ($iph->ihl_version == 0x45) {

@@ -185,11 +185,16 @@ func (prog *Program) addCommonBlock(opt *CommonOptions) {
 	timeoutBlock.Add(Stmt("exit()"))
 }
 
-func (prog *Program) addAggrDumpBlock(interval time.Duration) {
+func (prog *Program) addAggrDumpBlock(interval time.Duration, truncate int) {
+	printStmt := Stmt("print(@)")
+	if truncate > 0 {
+		printStmt = Stmtf("print(@, %d)", truncate)
+	}
+
 	block := prog.AddIntervalBlock(interval)
 	block.Add(
 		Stmt("time()"),
-		Stmt("print(@)"),
+		printStmt,
 		Stmt("clear(@)"))
 }
 

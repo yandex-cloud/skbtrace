@@ -9,7 +9,8 @@ skbtrace timeit from to aggregate [-f FUNC] [INTERVAL] [flags]
 ### Options
 
 ```
-  -h, --help   help for aggregate
+  -h, --help        help for aggregate
+  -t, --trunc int   Truncate aggregation print to N entries.
 ```
 
 ### Options inherited from parent commands

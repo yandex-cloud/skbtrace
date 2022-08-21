@@ -53,12 +53,10 @@ type TimeCommonOptions struct {
 // Options for BuildTimeAggregate.
 type TimeAggregateOptions struct {
 	TimeCommonOptions
+	AggregateCommonOptions
 
 	// Aggregate Func for time and divisor for adjusting from nanoseconds
 	Func AggrFunc
-
-	// Interval is a interval between dumping common aggregation
-	Interval time.Duration
 
 	// ToEventCount is a number of to probe firings before we start
 	// measuring time delta. Useful for measuring longer handshakes
@@ -251,7 +249,7 @@ func newAggrCleanup(aggrVar string) timeBuilderHelper {
 	}
 }
 
-// BuildTimeAggregate is a default time mode builder: meaures time deltas, puts them
+// BuildTimeAggregate is a default time mode builder: measures time deltas, puts them
 // into aggregation and periodically dumps aggregation contents.
 func (b *Builder) BuildTimeAggregate(opt TimeAggregateOptions) (*Program, error) {
 	prog, err := b.buildTimeTrace(
@@ -271,7 +269,7 @@ func (b *Builder) BuildTimeAggregate(opt TimeAggregateOptions) (*Program, error)
 		aggrs = append(aggrs, "@event_count")
 	}
 
-	prog.addAggrDumpBlock(opt.Interval)
+	prog.addAggrDumpBlock(opt.Interval, opt.Truncate)
 	prog.addAggrCleanupBlock(aggrs...)
 	return prog, err
 }

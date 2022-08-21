@@ -5,7 +5,6 @@ import (
 	"time"
 
 	"github.com/spf13/cobra"
-
 	"github.com/yandex-cloud/skbtrace"
 )
 
@@ -63,8 +62,10 @@ func NewDefaultAggregateRun(ctx *VisitorContext, commonOpts *skbtrace.TimeCommon
 	return NewRun(ctx, func() (*skbtrace.Program, error) {
 		opts := skbtrace.TimeAggregateOptions{
 			TimeCommonOptions: *commonOpts,
-			Func:              skbtrace.AFHist,
-			Interval:          time.Second,
+			AggregateCommonOptions: skbtrace.AggregateCommonOptions{
+				Interval: time.Second,
+			},
+			Func: skbtrace.AFHist,
 		}
 		return ctx.Builder.BuildTimeAggregate(opts)
 	})
@@ -125,10 +126,15 @@ var TimeAggregateCommand = &CommandProducer{
 	},
 	TimeVisitor: func(ctx *VisitorContext, cmd *cobra.Command, commonOpts *skbtrace.TimeCommonOptions) {
 		opts := skbtrace.TimeAggregateOptions{
-			Func:     skbtrace.AFHist,
-			Interval: time.Second,
+			AggregateCommonOptions: skbtrace.AggregateCommonOptions{
+				Interval: time.Second,
+			},
+			Func: skbtrace.AFHist,
 		}
+
+		flags := cmd.Flags()
 		RegisterTimeIntervalArg(ctx, cmd, &opts.Interval)
+		RegisterAggregateCommonOptions(flags, &opts.AggregateCommonOptions)
 		PassTimeCommonOptions(ctx, cmd, &opts.TimeCommonOptions, commonOpts)
 
 		cmd.Run = NewRun(ctx, func() (*skbtrace.Program, error) {

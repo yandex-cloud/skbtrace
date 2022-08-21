@@ -11,13 +11,12 @@ import (
 
 type tcpOptions struct {
 	filterOpts skbtrace.FilterOptions
-	isInbound  bool
-	isOutbound bool
+	direction  directionOptions
 	isUnderlay bool
 }
 
 var (
-	tcpKeysBase            = []string{"src", "dst", "sport", "dport"}
+	tcpKeysBase            = []string{"sport", "dport"}
 	tcpExtraKeysRetransmit = []string{"seq", "ack", "iplen"}
 )
 
@@ -100,25 +99,25 @@ var TcpRetransmitsCommand = &CommandProducer{
 
 func buildTcpTimeOptions(opts *tcpOptions, commonOpts *skbtrace.TimeCommonOptions) error {
 	var probeName string
-	keys := tcpKeysBase
+	keys := append(newIpForwardKeys(opts.direction), tcpKeysBase...)
 	hints := []string{"tcp"}
 	if opts.isUnderlay {
-		if opts.isInbound {
+		if opts.direction.isInbound {
 			probeName = skb.ProbeRecv
-		} else if opts.isOutbound {
+		} else if opts.direction.isOutbound {
 			probeName = skb.ProbeXmit
 		}
 		keys = wrapEncap(keys)
 		hints = wrapEncap(hints)
 	} else {
-		if opts.isInbound {
+		if opts.direction.isInbound {
 			probeName = skb.ProbeXmit
-		} else if opts.isOutbound {
+		} else if opts.direction.isOutbound {
 			probeName = skb.ProbeRecv
 		}
 	}
 	if probeName == "" {
-		return errors.New("either --ingress or --egress flag should be specified")
+		return errors.New("either --inbound or --outbound flag should be specified")
 	}
 
 	commonOpts.FromSpec = skbtrace.TimeSpec{
@@ -140,5 +139,5 @@ func registerTcpOptions(flags *pflag.FlagSet, opts *tcpOptions) {
 	RegisterFilterOptions(flags, &opts.filterOpts)
 	flags.BoolVar(&opts.isUnderlay, "underlay", false,
 		"Capture TCP in underlay interface.")
-	registerDirectionFlags(flags, &opts.isInbound, &opts.isOutbound)
+	registerDirectionFlags(flags, &opts.direction)
 }
