@@ -17,7 +17,7 @@ type tcpOptions struct {
 
 var (
 	tcpKeysBase            = []string{"sport", "dport"}
-	tcpExtraKeysRetransmit = []string{"seq", "ack", "iplen"}
+	tcpExtraKeysRetransmit = []string{"seq", "ack"}
 )
 
 var BaseTcpCommand = &CommandProducer{
@@ -31,7 +31,11 @@ var BaseTcpCommand = &CommandProducer{
 		registerTcpOptions(cmd.PersistentFlags(), &opts)
 
 		ctx.AddPreRun(cmd, func(cmd *cobra.Command, args []string) error {
-			return buildTcpTimeOptions(&opts, commonOpts)
+			var extraKeys []string
+			if cmd.Use == "retransmit" {
+				extraKeys = tcpExtraKeysRetransmit
+			}
+			return buildTcpTimeOptions(&opts, commonOpts, extraKeys)
 		})
 	},
 	Children: []*CommandProducer{
@@ -87,7 +91,7 @@ var TcpRetransmitsCommand = &CommandProducer{
 		ctx.AddPreRun(cmd, func(cmd *cobra.Command, args []string) error {
 			opts.CommonOptions = commonOpts.CommonOptions
 			opts.Spec = commonOpts.FromSpec
-			opts.Spec.Keys = append(tcpKeysBase, tcpExtraKeysRetransmit...)
+			opts.Spec.Keys = append(opts.Spec.Keys, tcpExtraKeysRetransmit...)
 			return nil
 		})
 
@@ -97,9 +101,11 @@ var TcpRetransmitsCommand = &CommandProducer{
 	},
 }
 
-func buildTcpTimeOptions(opts *tcpOptions, commonOpts *skbtrace.TimeCommonOptions) error {
+func buildTcpTimeOptions(opts *tcpOptions, commonOpts *skbtrace.TimeCommonOptions, extraTcpKeys []string) error {
 	var probeName string
 	keys := append(newIpForwardKeys(opts.direction), tcpKeysBase...)
+	keys = append(keys, extraTcpKeys...)
+
 	hints := []string{"tcp"}
 	if opts.isUnderlay {
 		if opts.direction.isInbound {

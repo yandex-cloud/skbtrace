@@ -11,7 +11,7 @@ const (
 
 	// Filter value. Supports dotted notation and some string constants
 	// for field preprocessors
-	reFilterValueGroup = "([A-Za-z0-9.:|]*|\"[^\"]*\")"
+	reFilterValueGroup = `([A-Za-z0-9.:|]*|"[^"]*")`
 )
 
 var reFilter = regexp.MustCompile("^" + strings.Join(
@@ -218,7 +218,9 @@ func (b *Builder) getFilterWeakRefs(filters [][]*ProcessedFilter) []weakAliasRef
 }
 
 func (w *weakAliasFieldRef) Ref() *fieldAliasRef {
-	// Since we have checked that all
+	// Since we've checked that all frefs are coming from the same object in
+	// processFilter(), we can use any fref since Ref() is only used to resolve
+	// object in resolveWeakAliasRefs()
 	return w.filter.frefs[0]
 }
 

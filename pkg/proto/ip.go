@@ -52,7 +52,7 @@ var ipFieldsRow2 = []*skbtrace.Field{
 var ipv6FieldRow1 = []*skbtrace.Field{
 	{Name: "priority_version", FmtSpec: "%x",
 		SanityFilter: &skbtrace.Filter{Op: "&", Value: "0x60"}},
-	{Name: "flow_lbl", Alias: "id", FmtSpec: "%d", Converter: convIpv6FlowLabel,
+	{Name: "flow_lbl", Alias: "id", FmtSpec: "0x%x", Converter: convIpv6FlowLabel,
 		ConverterMask: skbtrace.ConverterDump | skbtrace.ConverterHiddenKey | skbtrace.ConverterFilter},
 	{Name: "payload_len", Alias: "iplen", Converter: skbtrace.ConvNtohs, Preprocessor: skbtrace.FppNtohs},
 }

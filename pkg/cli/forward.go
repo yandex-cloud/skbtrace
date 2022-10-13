@@ -72,7 +72,7 @@ func handleForwardFiltersInterface(
 	if fwdOpts.direction.isInbound || fwdOpts.direction.isOutbound {
 		// -i ITF1 --inbound   - ingress to a VM
 		// -i ITF1 --outbound  - egress from a VM
-		if len(fwdOpts.itfNames) != 1 {
+		if len(fwdOpts.itfNames) != 1 || (fwdOpts.direction.isInbound && fwdOpts.direction.isOutbound) {
 			return wrapError(forwardUsageError)
 		}
 
