@@ -7,9 +7,8 @@ import (
 	"strconv"
 	"strings"
 
-	"github.com/yandex-cloud/skbtrace/pkg/skb"
-
 	"github.com/yandex-cloud/skbtrace"
+	"github.com/yandex-cloud/skbtrace/pkg/skb"
 )
 
 const (
@@ -94,30 +93,30 @@ var udpHdrDef string
 var headerFuncsTrans = []string{OverlayHeaderLengthFunc, InnerIpHeaderLengthFunc}
 var objTrans = []*skbtrace.Object{
 	{Variable: ObjTcpHdr, HeaderFiles: headerFiles, StructDefs: []string{"tcphdr"},
-		SanityFilter: newTransportSanityFilter(ObjIpHdr, TcpProtocolNumber),
+		SanityFilter: NewTransportSanityFilter(ObjIpHdr, TcpProtocolNumber),
 		Casts: map[string]string{
-			"$skb": skb.NewDataCastBuilder("tcphdr").SetField("network_header").SetInnerHelpers(
+			"$skb": skb.NewDataCastBuilder("tcphdr", "head").SetField("network_header").SetInnerHelpers(
 				InnerIpHeaderLengthFunc).Build(),
 		}},
 	{Variable: ObjUdpHdr, HeaderFiles: headerFiles, StructDefs: []string{"udphdr"},
-		SanityFilter: newTransportSanityFilter(ObjIpHdr, UdpProtocolNumber),
+		SanityFilter: NewTransportSanityFilter(ObjIpHdr, UdpProtocolNumber),
 		Casts: map[string]string{
-			"$skb": skb.NewDataCastBuilder("udphdr").SetField("network_header").SetInnerHelpers(
+			"$skb": skb.NewDataCastBuilder("udphdr", "head").SetField("network_header").SetInnerHelpers(
 				InnerIpHeaderLengthFunc).Build(),
 		}},
 	{Variable: ObjTcpHdrInner, HeaderFiles: headerFiles, StructDefs: []string{"tcphdr"},
-		SanityFilter: newTransportSanityFilter(ObjIpHdrInner, TcpProtocolNumber),
+		SanityFilter: NewTransportSanityFilter(ObjIpHdrInner, TcpProtocolNumber),
 		Casts: map[string]string{
-			"$skb": skb.NewDataCastBuilder("tcphdr").SetInnerHelpers(headerFuncsTrans...).Build(),
+			"$skb": skb.NewDataCastBuilder("tcphdr", "head").SetInnerHelpers(headerFuncsTrans...).Build(),
 		}},
 	{Variable: ObjUdpHdrInner, HeaderFiles: headerFiles, StructDefs: []string{"udphdr"},
-		SanityFilter: newTransportSanityFilter(ObjIpHdrInner, UdpProtocolNumber),
+		SanityFilter: NewTransportSanityFilter(ObjIpHdrInner, UdpProtocolNumber),
 		Casts: map[string]string{
-			"$skb": skb.NewDataCastBuilder("udphdr").SetInnerHelpers(headerFuncsTrans...).Build(),
+			"$skb": skb.NewDataCastBuilder("udphdr", "head").SetInnerHelpers(headerFuncsTrans...).Build(),
 		}},
 }
 
-func newTransportSanityFilter(obj string, protoNum int) skbtrace.Filter {
+func NewTransportSanityFilter(obj string, protoNum int) skbtrace.Filter {
 	return skbtrace.Filter{Object: obj, Field: "protocol", Op: "==", Value: strconv.Itoa(protoNum)}
 }
 
@@ -155,7 +154,7 @@ func fppTcpFlags(op, value string) (string, error) {
 			}
 		}
 		if chrMask == 0 {
-			return "", fmt.Errorf("unknown TCP flag mnemonic '%r'", chr)
+			return "", fmt.Errorf("unknown TCP flag mnemonic '%c'", rune(chr))
 		}
 		mask |= chrMask
 	}

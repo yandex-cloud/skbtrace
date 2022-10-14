@@ -36,11 +36,11 @@ func (b *Builder) deduceDumpObjects(boSet builderObjectSet, rows []string) {
 func (b *Builder) deduceFilterObjects(boSet builderObjectSet, filters [][]*ProcessedFilter) {
 	for _, filterChunk := range filters {
 		for _, filter := range filterChunk {
-			if filter.fref.fg == nil {
+			if filter.frefs[0].fg == nil {
 				continue
 			}
 
-			boSet[filter.fref.fg.Object] = struct{}{}
+			boSet[filter.frefs[0].fg.Object] = struct{}{}
 		}
 	}
 }

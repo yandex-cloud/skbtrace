@@ -28,6 +28,10 @@ type CommonOptions struct {
 type TraceCommonOptions struct {
 	CommonOptions
 
+	ContextProbeNames    []string
+	ContextFilterOptions FilterOptions
+	ContextKey           string
+
 	ProbeNames []string
 	FilterOptions
 }
@@ -48,9 +52,19 @@ type TraceDumpOptions struct {
 	CommonDumpOptions
 }
 
+type AggregateCommonOptions struct {
+	// Interval of aggregation map dumping
+	Interval time.Duration
+
+	// Truncate defines number of entries that should be printed when printing
+	// the aggregation if set to positive value
+	Truncate int
+}
+
 // Options for BuildAggregate
 type TraceAggregateOptions struct {
 	TraceCommonOptions
+	AggregateCommonOptions
 
 	// Aggregation Func and its argument (optional)
 	Func AggrFunc
@@ -58,9 +72,6 @@ type TraceAggregateOptions struct {
 
 	// Keys for aggregation map entry. Optionally, probe name may be added
 	Keys []string
-
-	// Interval of aggregation map dumping
-	Interval time.Duration
 }
 
 func (b *Builder) buildTracerImpl(
@@ -81,24 +92,66 @@ func (b *Builder) buildTracerImpl(
 	prog := NewProgram()
 	prog.addCommonBlock(&opt.CommonOptions)
 
-	for _, probeName := range opt.ProbeNames {
-		probeBlock, block, err := b.addProbeBlock(prog, probeName, filters)
+	if len(opt.ContextProbeNames) > 0 {
+		traceFlagExpr := Exprf("@trace_flag[%s]", opt.ContextKey)
+		innerBuilder := builder
+		builder = func(block *Block) error {
+			innerBlock := block.AddIfBlock(traceFlagExpr)
+			return innerBuilder(innerBlock)
+		}
+
+		contextFilters, err := b.prepareFilters(opt.ContextFilterOptions)
 		if err != nil {
 			return nil, err
 		}
 
-		err = builder(block)
-		if err != nil {
-			return nil, newProbeBuildError(probeName, err)
-		}
+		for _, probeName := range opt.ContextProbeNames {
+			if err = b.buildTracerProbe(prog, probeName, false, contextFilters, true, func(block *Block) error {
+				block.Addf("%s = 1", traceFlagExpr)
+				return nil
+			}); err != nil {
+				return nil, err
+			}
 
-		// Add diagnostic of number of times the probe was hit.
-		// Will be printed on exit like any other global array
-		block.Addf(`@hits["%s:filtered"] = count()`, probeName)
-		probeBlock.Addf(`@hits["%s"] = count()`, probeName)
+			if err = b.buildTracerProbe(prog, probeName, true, nil, false, func(block *Block) error {
+				block.Addf("delete(%s)", traceFlagExpr)
+				return nil
+			}); err != nil {
+				return nil, err
+			}
+		}
+	}
+
+	for _, probeName := range opt.ProbeNames {
+		if err = b.buildTracerProbe(prog, probeName, false, filters, true, builder); err != nil {
+			return nil, err
+		}
 	}
 
 	return prog, nil
+}
+
+func (b *Builder) buildTracerProbe(
+	prog *Program, probeName string, isReturn bool, filters [][]*ProcessedFilter,
+	countHits bool, builder func(block *Block) error,
+) error {
+	probeBlock, block, err := b.addProbeBlock(prog, probeName, isReturn, filters)
+	if err != nil {
+		return err
+	}
+
+	err = builder(block)
+	if err != nil {
+		return newProbeBuildError(probeName, err)
+	}
+
+	// Add diagnostic of number of times the probe was hit.
+	// Will be printed on exit like any other global array
+	if countHits {
+		block.Addf(`@hits["%s:filtered"] = count()`, probeName)
+		probeBlock.Addf(`@hits["%s"] = count()`, probeName)
+	}
+	return nil
 }
 
 // BuildDumpTrace builds a tracer where each probe prints known fields
@@ -144,7 +197,7 @@ func (b *Builder) BuildAggregate(opt TraceAggregateOptions) (*Program, error) {
 		return nil, err
 	}
 
-	prog.addAggrDumpBlock(opt.Interval)
+	prog.addAggrDumpBlock(opt.Interval, opt.Truncate)
 	return prog, nil
 }
 
@@ -170,7 +223,7 @@ func (b *Builder) wrapFilter(
 ) (*Block, error) {
 	// The only case for multiple filters are arrays, so assume
 	// that both filters use same object
-	block, err := b.getBlockWithObject(block, filterChunk[0].fref.fg.Object)
+	block, err := b.getBlockWithObject(block, filterChunk[0].frefs[0].fg.Object)
 	if err != nil {
 		return nil, err
 	}
@@ -253,6 +306,7 @@ func (b *Builder) getTimeStatements(timeMode TimeMode) (
 		post = []Statement{Stmtf("@last_event = elapsed")}
 		fmtSpec = "+%ld"
 	case TMTime:
+		// FIXME: this is incorrect as nsecs is not supposed to be a wallclock
 		pre = []Statement{Stmt(`time("%H:%M:%S.")`)}
 		expr = "nsecs % 1000000000"
 		fmtSpec = "%09ld"

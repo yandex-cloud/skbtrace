@@ -8,9 +8,8 @@ import (
 	"strings"
 	"syscall"
 
-	"github.com/yandex-cloud/skbtrace/pkg/skb"
-
 	"github.com/yandex-cloud/skbtrace"
+	"github.com/yandex-cloud/skbtrace/pkg/skb"
 )
 
 const (
@@ -53,7 +52,7 @@ var ipFieldsRow2 = []*skbtrace.Field{
 var ipv6FieldRow1 = []*skbtrace.Field{
 	{Name: "priority_version", FmtSpec: "%x",
 		SanityFilter: &skbtrace.Filter{Op: "&", Value: "0x60"}},
-	{Name: "flow_lbl", Alias: "id", FmtSpec: "%d", Converter: convIpv6FlowLabel,
+	{Name: "flow_lbl", Alias: "id", FmtSpec: "0x%x", Converter: convIpv6FlowLabel,
 		ConverterMask: skbtrace.ConverterDump | skbtrace.ConverterHiddenKey | skbtrace.ConverterFilter},
 	{Name: "payload_len", Alias: "iplen", Converter: skbtrace.ConvNtohs, Preprocessor: skbtrace.FppNtohs},
 }
@@ -80,25 +79,34 @@ var ipHdrDef string
 //go:embed headers/ipv6hdr.h
 var ipv6HdrDef string
 
+type InvalidIPv4AddressError struct {
+	Address string
+	IsIPv6  bool
+}
+
+func (e *InvalidIPv4AddressError) Error() string {
+	return fmt.Sprintf("invalid IPv4 address '%s'", e.Address)
+}
+
 var objIp = []*skbtrace.Object{
 	{Variable: ObjIpHdr, HeaderFiles: headerFiles, StructDefs: []string{"iphdr"},
 		Casts: map[string]string{
-			"$skb": skb.NewDataCastBuilder("iphdr").SetField("network_header").Build(),
+			"$skb": skb.NewDataCastBuilder("iphdr", "head").SetField("network_header").Build(),
 		}},
 	{Variable: ObjIpHdrInner, HeaderFiles: headerFiles, StructDefs: []string{"iphdr"},
 		Casts: map[string]string{
-			"$skb": skb.NewDataCastBuilder("iphdr").SetInnerHelpers(OverlayHeaderLengthFunc).Build(),
+			"$skb": skb.NewDataCastBuilder("iphdr", "head").SetInnerHelpers(OverlayHeaderLengthFunc).Build(),
 		}},
 }
 
 var objIpv6 = []*skbtrace.Object{
 	{Variable: ObjIpv6Hdr, HeaderFiles: headerFiles, StructDefs: []string{"ipv6hdr"},
 		Casts: map[string]string{
-			"$skb": skb.NewDataCastBuilder("ipv6hdr").SetField("network_header").Build(),
+			"$skb": skb.NewDataCastBuilder("ipv6hdr", "head").SetField("network_header").Build(),
 		}},
 	{Variable: ObjIpv6HdrInner, HeaderFiles: headerFiles, StructDefs: []string{"ipv6hdr"},
 		Casts: map[string]string{
-			"$skb": skb.NewDataCastBuilder("ipv6hdr").SetInnerHelpers(OverlayHeaderLengthFunc).Build(),
+			"$skb": skb.NewDataCastBuilder("ipv6hdr", "head").SetInnerHelpers(OverlayHeaderLengthFunc).Build(),
 		}},
 }
 
@@ -130,7 +138,7 @@ func FppPtonInet(op, value string) (string, error) {
 
 	ip := net.ParseIP(value)
 	if ip == nil || ip.To4() == nil {
-		return "", fmt.Errorf("invalid IPv4 address '%s'", value)
+		return "", &InvalidIPv4AddressError{Address: value, IsIPv6: ip != nil}
 	}
 
 	u := skbtrace.HostEndian.Uint32(ip.To4())

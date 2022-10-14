@@ -53,12 +53,10 @@ type TimeCommonOptions struct {
 // Options for BuildTimeAggregate.
 type TimeAggregateOptions struct {
 	TimeCommonOptions
+	AggregateCommonOptions
 
 	// Aggregate Func for time and divisor for adjusting from nanoseconds
 	Func AggrFunc
-
-	// Interval is a interval between dumping common aggregation
-	Interval time.Duration
 
 	// ToEventCount is a number of to probe firings before we start
 	// measuring time delta. Useful for measuring longer handshakes
@@ -251,7 +249,7 @@ func newAggrCleanup(aggrVar string) timeBuilderHelper {
 	}
 }
 
-// BuildTimeAggregate is a default time mode builder: meaures time deltas, puts them
+// BuildTimeAggregate is a default time mode builder: measures time deltas, puts them
 // into aggregation and periodically dumps aggregation contents.
 func (b *Builder) BuildTimeAggregate(opt TimeAggregateOptions) (*Program, error) {
 	prog, err := b.buildTimeTrace(
@@ -271,7 +269,7 @@ func (b *Builder) BuildTimeAggregate(opt TimeAggregateOptions) (*Program, error)
 		aggrs = append(aggrs, "@event_count")
 	}
 
-	prog.addAggrDumpBlock(opt.Interval)
+	prog.addAggrDumpBlock(opt.Interval, opt.Truncate)
 	prog.addAggrCleanupBlock(aggrs...)
 	return prog, err
 }
@@ -370,7 +368,7 @@ func (b *Builder) buildTimeProbe(
 	}
 
 	var sharedFilters bool
-	if len(spec.Filters) > 0 {
+	if len(spec.Filters) > 0 || len(spec.RawFilters) > 0 {
 		ctx.filters, err = b.prepareFilters(spec.FilterOptions)
 		if err != nil {
 			return
@@ -386,7 +384,7 @@ func (b *Builder) buildTimeProbe(
 	}
 
 	if spec.Probe != ctxBase.probeName || ctxBase.probeBlock == nil {
-		ctx.probeBlock, ctx.outerBlock, err = b.addProbeBlock(prog, spec.Probe, ctx.filters)
+		ctx.probeBlock, ctx.outerBlock, err = b.addProbeBlock(prog, spec.Probe, false, ctx.filters)
 	} else {
 		ctx.probeBlock = ctxBase.probeBlock
 		if !sharedFilters {

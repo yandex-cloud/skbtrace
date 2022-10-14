@@ -2,18 +2,43 @@ package cli
 
 import (
 	"fmt"
+	"strings"
 	"time"
 
 	"github.com/spf13/cobra"
 	"github.com/spf13/pflag"
-
 	"github.com/yandex-cloud/skbtrace"
 	"github.com/yandex-cloud/skbtrace/pkg/skb"
 )
 
 const (
 	defaultUnderlayDevice = "eth1"
+	defaultContextKey     = "tid"
 )
+
+// rawFilterSlice is a variant of stringSlice from cobra that doesn't use
+// CSV internally. This allows for CSV-incompatible arguments
+type rawFilterSlice struct {
+	value *[]string
+}
+
+func newRawFilterSliceValue(p *[]string) *rawFilterSlice {
+	rfsv := new(rawFilterSlice)
+	rfsv.value = p
+	return rfsv
+}
+
+func (rfsv *rawFilterSlice) Type() string { return "RawFilters" }
+func (rfsv *rawFilterSlice) String() string {
+	return strings.Join(*rfsv.value, " && ")
+}
+func (rfsv *rawFilterSlice) Set(s string) error {
+	rawFilters := strings.Split(s, "&&")
+	for _, rawFilter := range rawFilters {
+		*rfsv.value = append(*rfsv.value, strings.TrimSpace(rawFilter))
+	}
+	return nil
+}
 
 type timeModeValue struct {
 	tm *skbtrace.TimeMode
@@ -72,13 +97,27 @@ func RegisterCommonDumpOptions(flags *pflag.FlagSet, opt *skbtrace.CommonDumpOpt
 }
 
 func RegisterFilterOptions(flags *pflag.FlagSet, options *skbtrace.FilterOptions) {
-	flags.StringSliceVarP(&options.RawFilters, "filter", "F", nil,
+	flags.VarP(newRawFilterSliceValue(&options.RawFilters), "filter", "F",
 		`Filters. Use 'fields' subcommand to list available fields.`)
 }
 
 func RegisterTracerProbeOptions(flags *pflag.FlagSet, opts *skbtrace.TraceCommonOptions) {
 	flags.StringSliceVarP(&opts.ProbeNames, "probe", "P", nil,
 		`Probe names to generate. Use 'probes' subcommand to list available probes.`)
+}
+
+func RegisterTracerContextOptions(flags *pflag.FlagSet, opts *skbtrace.TraceCommonOptions) {
+	flags.StringSliceVarP(&opts.ContextProbeNames, "context-probe", "C", nil,
+		`Probe names that trigger normal probe execution. Use 'probes' subcommand to list available probes.`)
+	flags.Var(newRawFilterSliceValue(&opts.ContextFilterOptions.RawFilters), "context-filter",
+		`Filters. Use 'fields' subcommand to list available fields.`)
+	flags.StringVar(&opts.ContextKey, "context-key", defaultContextKey,
+		`Key to be used to map context probe firings to normal probe firings`)
+}
+
+func RegisterAggregateCommonOptions(flags *pflag.FlagSet, opts *skbtrace.AggregateCommonOptions) {
+	flags.IntVarP(&opts.Truncate, "trunc", "t", 0,
+		`Truncate aggregation print to N entries.`)
 }
 
 func RegisterInterfaceOptions(

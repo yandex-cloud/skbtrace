@@ -6,24 +6,28 @@ import (
 
 	"github.com/spf13/cobra"
 	"github.com/spf13/pflag"
-
 	"github.com/yandex-cloud/skbtrace"
 	"github.com/yandex-cloud/skbtrace/pkg/skb"
 	"github.com/yandex-cloud/skbtrace/pkg/stringutil"
 )
 
+type directionOptions struct {
+	isInbound  bool
+	isOutbound bool
+	isNat      bool
+}
+
 type forwardOptions struct {
 	filterOptions   skbtrace.FilterOptions
 	itfNames        []string
 	underlayItfName string
-	isIngress       bool
-	isEgress        bool
+	direction       directionOptions
 }
 
 var (
-	forwardKeysRaw = []string{"src", "dst", "id"}
-	forwardKeysUdp = []string{"src", "dst", "sport", "dport"}
-	forwardKeysTcp = []string{"src", "dst", "sport", "dport", "seq"}
+	forwardKeysRaw = []string{"id"}
+	forwardKeysUdp = []string{"sport", "dport"}
+	forwardKeysTcp = []string{"sport", "dport", "seq"}
 
 	forwardUsageError = errors.New("exactly two interfaces or" +
 		" one interface with ingress/egress flag is expected")
@@ -65,15 +69,15 @@ func handleForwardFiltersInterface(
 	var encapOpt bool
 	var itfFilter []*skbtrace.Filter
 
-	if fwdOpts.isIngress || fwdOpts.isEgress {
-		// -i ITF1 --ingress - ingress to a VM
-		// -i ITF1 --egress  - egress from a VM
-		if len(fwdOpts.itfNames) != 1 {
+	if fwdOpts.direction.isInbound || fwdOpts.direction.isOutbound {
+		// -i ITF1 --inbound   - ingress to a VM
+		// -i ITF1 --outbound  - egress from a VM
+		if len(fwdOpts.itfNames) != 1 || (fwdOpts.direction.isInbound && fwdOpts.direction.isOutbound) {
 			return wrapError(forwardUsageError)
 		}
 
 		itfName := fwdOpts.itfNames[0]
-		if fwdOpts.isIngress {
+		if fwdOpts.direction.isInbound {
 			switch probe {
 			case skb.ProbeRecv:
 				itfFilter, err = buildUnderlayFilter(ctx, itfName, fwdOpts.underlayItfName)
@@ -81,7 +85,7 @@ func handleForwardFiltersInterface(
 			case skb.ProbeXmit:
 				itfFilter, err = buildInterfaceFilter(ctx, itfName)
 			}
-		} else if fwdOpts.isEgress {
+		} else if fwdOpts.direction.isOutbound {
 			switch probe {
 			case skb.ProbeRecv:
 				itfFilter, err = buildInterfaceFilter(ctx, itfName)
@@ -108,7 +112,7 @@ func handleForwardFiltersInterface(
 	}
 
 	spec.Probe = probe
-	spec.Keys, spec.Hints = buildForwardKeys(encapOpt, commonOpts)
+	spec.Keys, spec.Hints = buildForwardKeys(fwdOpts, encapOpt, commonOpts)
 	spec.FilterOptions = skbtrace.FilterOptions{
 		RawFilters: fwdOpts.filterOptions.RawFilters,
 		Filters:    append(fwdOpts.filterOptions.Filters, itfFilter...),
@@ -116,19 +120,36 @@ func handleForwardFiltersInterface(
 	return nil
 }
 
-func buildForwardKeys(encapOpt bool, commonOpts *skbtrace.CommonOptions) (keys []string, hints []string) {
+func newIpForwardKeys(opts directionOptions) []string {
+	if opts.isNat {
+		// Assume DNAT on inbound packets, and SNAT on outbound, ignore corresponding addresses
+		if opts.isInbound {
+			return []string{"src"}
+		} else if opts.isOutbound {
+			return []string{"dst"}
+		}
+	}
+
+	return []string{"src", "dst"}
+}
+
+func buildForwardKeys(
+	opts *forwardOptions, encapOpt bool, commonOpts *skbtrace.CommonOptions,
+) (keys []string, hints []string) {
+	keys = newIpForwardKeys(opts.direction)
+
 	if stringutil.SliceContains(commonOpts.Hints, "tcp") {
-		keys = forwardKeysTcp
+		keys = append(keys, forwardKeysTcp...)
 		if encapOpt {
 			hints = []string{"inner-tcp"}
 		}
 	} else if stringutil.SliceContains(commonOpts.Hints, "udp") {
-		keys = forwardKeysUdp
+		keys = append(keys, forwardKeysUdp...)
 		if encapOpt {
 			hints = []string{"inner-udp"}
 		}
 	} else {
-		keys = forwardKeysRaw
+		keys = append(keys, forwardKeysRaw...)
 	}
 
 	if encapOpt {
@@ -137,11 +158,13 @@ func buildForwardKeys(encapOpt bool, commonOpts *skbtrace.CommonOptions) (keys [
 	return
 }
 
-func registerDirectionFlags(flags *pflag.FlagSet, ingressPtr, egressPtr *bool) {
-	flags.BoolVar(ingressPtr, "ingress", false,
-		"Direction is ingress (towards specified interface)")
-	flags.BoolVar(egressPtr, "egress", false,
-		"Direction is egress (from specified interface)")
+func registerDirectionFlags(flags *pflag.FlagSet, opts *directionOptions) {
+	flags.BoolVar(&opts.isInbound, "inbound", false,
+		"Direction is inbound (towards specified interface)")
+	flags.BoolVar(&opts.isOutbound, "outbound", false,
+		"Direction is outbound (from specified interface)")
+	flags.BoolVar(&opts.isNat, "nat", false,
+		"Assume that NAT translation is applied, ignore src and/or dst.")
 }
 
 func registerForwardOptions(flags *pflag.FlagSet, opts *forwardOptions) {
@@ -150,6 +173,6 @@ func registerForwardOptions(flags *pflag.FlagSet, opts *forwardOptions) {
 			` egress interface in local forwarding.`)
 	flags.StringVarP(&opts.underlayItfName, "underlay-iface", "u", defaultUnderlayDevice,
 		`Default underlay device used if it cannot be guessed`)
-	registerDirectionFlags(flags, &opts.isIngress, &opts.isEgress)
+	registerDirectionFlags(flags, &opts.direction)
 	RegisterFilterOptions(flags, &opts.filterOptions)
 }

@@ -3,9 +3,8 @@ package proto
 import (
 	_ "embed"
 
-	"github.com/yandex-cloud/skbtrace/pkg/skb"
-
 	"github.com/yandex-cloud/skbtrace"
+	"github.com/yandex-cloud/skbtrace/pkg/skb"
 )
 
 const (
@@ -30,7 +29,7 @@ var macHdrDef string
 var ethObjects = []*skbtrace.Object{
 	{Variable: "$eth_hdr", HeaderFiles: headerFiles, StructDefs: []string{"machdr"},
 		Casts: map[string]string{
-			"$skb": skb.NewDataCastBuilder("machdr").SetField("mac_header").Build(),
+			"$skb": skb.NewDataCastBuilder("machdr", "head").SetField("mac_header").Build(),
 		}},
 }
 

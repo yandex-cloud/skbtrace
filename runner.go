@@ -27,7 +27,8 @@ type RunnerOptions struct {
 	BPFTraceBinary string
 }
 
-var reBpfTraceVersion = regexp.MustCompile(`bpftrace v(\d+)\.(\d+)\.(\d+)`)
+// NOTE: Yandex Cloud internal builds use build version prefix
+var reBpfTraceVersion = regexp.MustCompile(`bpftrace (?:gv|build-)(\d+)\.(\d+)\.(\d+)`)
 var safeDefaultVersion = Version{0, 9, 2}
 var StructKeywordVersion = Version{0, 9, 4}
 

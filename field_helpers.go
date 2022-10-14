@@ -18,6 +18,22 @@ func NewConvBitfieldExpr(offset uint, mask uint64) FieldConverter {
 	}
 }
 
+func NewArrayConvExpr(size int) FieldConverter {
+	return func(obj, field string) ([]Statement, Expression) {
+		fieldExpr := ExprField(obj, field)
+		exprs := make([]Expression, size)
+		for i := range exprs {
+			exprs[i] = Exprf(`%s[%d]`, fieldExpr, i)
+		}
+		return nil, ExprJoin(exprs)
+	}
+}
+
+func NewArrayConvFmtSpec(size int, fmtkey string) string {
+	s := strings.Repeat(fmtkey+", ", size)
+	return s[:len(s)-2]
+}
+
 // FormatVariableName formats intermediate variable name which can be used for nested fields
 func FormatVariableName(field string) Expression {
 	return Exprf("$%s", strings.ReplaceAll(strings.ReplaceAll(field, ".", "_"), "->", "_"))
@@ -36,7 +52,13 @@ func ConvNtohs(obj, field string) ([]Statement, Expression) {
 
 // Field preprocessor for ntohs values
 func FppNtohs(op, value string) (string, error) {
-	uintValue, err := strconv.ParseUint(value, 10, 16)
+	base := 10
+	if len(value) > 2 && value[:2] == "0x" {
+		value = value[2:]
+		base = 16
+	}
+
+	uintValue, err := strconv.ParseUint(value, base, 16)
 	if err != nil {
 		return "", err
 	}

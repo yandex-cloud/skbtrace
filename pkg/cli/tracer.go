@@ -6,7 +6,6 @@ import (
 
 	"github.com/spf13/cobra"
 	"github.com/spf13/pflag"
-
 	"github.com/yandex-cloud/skbtrace"
 )
 
@@ -20,6 +19,7 @@ func (producer *CommandProducer) addTracer(
 	var opts skbtrace.TraceCommonOptions
 	PassCommonOptions(ctx, cmd, &opts.CommonOptions, commonOpts)
 	RegisterTracerProbeOptions(cmd.Flags(), &opts)
+	RegisterTracerContextOptions(cmd.Flags(), &opts)
 	RegisterFilterOptions(cmd.Flags(), &opts.FilterOptions)
 	RegisterInterfaceOptions(ctx, cmd, &opts.FilterOptions)
 
@@ -94,8 +94,10 @@ func (dumper *AggregateTracerCommand) Visit(
 	commonOpts *skbtrace.TraceCommonOptions,
 ) {
 	opts := skbtrace.TraceAggregateOptions{
-		Func:     skbtrace.AFCount,
-		Interval: time.Second,
+		AggregateCommonOptions: skbtrace.AggregateCommonOptions{
+			Interval: time.Second,
+		},
+		Func: skbtrace.AFCount,
 	}
 	PassTraceCommonOptions(ctx, cmd, &opts.TraceCommonOptions, commonOpts)
 	dumper.Visitor(ctx, cmd, &opts)
@@ -125,7 +127,9 @@ var CommonAggregateCommand = &CommandProducer{
 
 	TracerVisitor: &AggregateTracerCommand{
 		Visitor: func(ctx *VisitorContext, cmd *cobra.Command, opts *skbtrace.TraceAggregateOptions) {
-			RegisterAggregateOptions(cmd.Flags(), opts)
+			flags := cmd.Flags()
+			RegisterAggregateOptions(flags, opts)
+			RegisterAggregateCommonOptions(flags, &opts.AggregateCommonOptions)
 			RegisterTimeIntervalArg(ctx, cmd, &opts.Interval)
 		},
 	},

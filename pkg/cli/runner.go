@@ -5,8 +5,8 @@ import (
 
 	"github.com/mitchellh/go-wordwrap"
 	"github.com/spf13/cobra"
-
 	"github.com/yandex-cloud/skbtrace"
+	"github.com/yandex-cloud/skbtrace/pkg/proto"
 )
 
 const (
@@ -21,6 +21,7 @@ const (
 		" Allowed operators: ==, !=, >, <, >=, <=."
 	hintUnspecifiedProbe = "Probe name can be specified using -P (--probe) option." +
 		" To see available options, use 'help' command."
+	hintIPv6Address = "Specify flag '-6' to work with IPv6 packets."
 )
 
 type CommandBuilder func() (*skbtrace.Program, error)
@@ -66,6 +67,11 @@ func getBuilderErrorHint(skbErr skbtrace.Error) string {
 		case skbtrace.ErrLevelProbe:
 			return hintUnspecifiedProbe
 		}
+	}
+
+	nextErr := skbErr.NextError()
+	if addrErr, ok := nextErr.(*proto.InvalidIPv4AddressError); ok && addrErr.IsIPv6 {
+		return hintIPv6Address
 	}
 
 	return ""

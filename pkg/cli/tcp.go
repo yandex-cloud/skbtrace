@@ -5,21 +5,19 @@ import (
 
 	"github.com/spf13/cobra"
 	"github.com/spf13/pflag"
-
 	"github.com/yandex-cloud/skbtrace"
 	"github.com/yandex-cloud/skbtrace/pkg/skb"
 )
 
 type tcpOptions struct {
 	filterOpts skbtrace.FilterOptions
-	isIngress  bool
-	isEgress   bool
+	direction  directionOptions
 	isUnderlay bool
 }
 
 var (
-	tcpKeysBase            = []string{"src", "dst", "sport", "dport"}
-	tcpExtraKeysRetransmit = []string{"seq", "ack", "iplen"}
+	tcpKeysBase            = []string{"sport", "dport"}
+	tcpExtraKeysRetransmit = []string{"seq", "ack"}
 )
 
 var BaseTcpCommand = &CommandProducer{
@@ -33,7 +31,11 @@ var BaseTcpCommand = &CommandProducer{
 		registerTcpOptions(cmd.PersistentFlags(), &opts)
 
 		ctx.AddPreRun(cmd, func(cmd *cobra.Command, args []string) error {
-			return buildTcpTimeOptions(&opts, commonOpts)
+			var extraKeys []string
+			if cmd.Use == "retransmit" {
+				extraKeys = tcpExtraKeysRetransmit
+			}
+			return buildTcpTimeOptions(&opts, commonOpts, extraKeys)
 		})
 	},
 	Children: []*CommandProducer{
@@ -45,8 +47,8 @@ var BaseTcpCommand = &CommandProducer{
 
 var TcpHandshakeCommand = &CommandProducer{
 	Base: &cobra.Command{
-		Use:     "handshake {--ingress|--egress} [--underlay] -i ITF",
-		Example: "handshake --ingress -i tapxx-0 -6",
+		Use:     "handshake {--inbound|--outbound} [--underlay] -i ITF",
+		Example: "handshake --inbound -i tapxx-0 -6",
 		Short:   "Measures time for TCP handshake",
 	},
 	TimeVisitor: func(ctx *VisitorContext, cmd *cobra.Command, opts *skbtrace.TimeCommonOptions) {
@@ -62,7 +64,7 @@ var TcpHandshakeCommand = &CommandProducer{
 
 var TcpLifetimeCommand = &CommandProducer{
 	Base: &cobra.Command{
-		Use:   "lifetime",
+		Use:   "lifetime {--inbound|--outbound}",
 		Short: "Measures TCP connection lifetime from SYN to FIN/RST in the same direction",
 	},
 	TimeVisitor: func(ctx *VisitorContext, cmd *cobra.Command, opts *skbtrace.TimeCommonOptions) {
@@ -89,7 +91,7 @@ var TcpRetransmitsCommand = &CommandProducer{
 		ctx.AddPreRun(cmd, func(cmd *cobra.Command, args []string) error {
 			opts.CommonOptions = commonOpts.CommonOptions
 			opts.Spec = commonOpts.FromSpec
-			opts.Spec.Keys = append(tcpKeysBase, tcpExtraKeysRetransmit...)
+			opts.Spec.Keys = append(opts.Spec.Keys, tcpExtraKeysRetransmit...)
 			return nil
 		})
 
@@ -99,27 +101,29 @@ var TcpRetransmitsCommand = &CommandProducer{
 	},
 }
 
-func buildTcpTimeOptions(opts *tcpOptions, commonOpts *skbtrace.TimeCommonOptions) error {
+func buildTcpTimeOptions(opts *tcpOptions, commonOpts *skbtrace.TimeCommonOptions, extraTcpKeys []string) error {
 	var probeName string
-	keys := tcpKeysBase
+	keys := append(newIpForwardKeys(opts.direction), tcpKeysBase...)
+	keys = append(keys, extraTcpKeys...)
+
 	hints := []string{"tcp"}
 	if opts.isUnderlay {
-		if opts.isIngress {
+		if opts.direction.isInbound {
 			probeName = skb.ProbeRecv
-		} else if opts.isEgress {
+		} else if opts.direction.isOutbound {
 			probeName = skb.ProbeXmit
 		}
 		keys = wrapEncap(keys)
 		hints = wrapEncap(hints)
 	} else {
-		if opts.isIngress {
+		if opts.direction.isInbound {
 			probeName = skb.ProbeXmit
-		} else if opts.isEgress {
+		} else if opts.direction.isOutbound {
 			probeName = skb.ProbeRecv
 		}
 	}
 	if probeName == "" {
-		return errors.New("either --ingress or --egress flag should be specified")
+		return errors.New("either --inbound or --outbound flag should be specified")
 	}
 
 	commonOpts.FromSpec = skbtrace.TimeSpec{
@@ -141,5 +145,5 @@ func registerTcpOptions(flags *pflag.FlagSet, opts *tcpOptions) {
 	RegisterFilterOptions(flags, &opts.filterOpts)
 	flags.BoolVar(&opts.isUnderlay, "underlay", false,
 		"Capture TCP in underlay interface.")
-	registerDirectionFlags(flags, &opts.isIngress, &opts.isEgress)
+	registerDirectionFlags(flags, &opts.direction)
 }

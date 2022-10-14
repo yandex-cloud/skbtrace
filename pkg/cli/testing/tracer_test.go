@@ -23,6 +23,10 @@ func TestDumpTest(t *testing.T) {
 
 		// Interface filter test
 		{"dump", "-P", "recv", "-o", "ip", "-i", "eth3"},
+
+		// Test context probes
+		{"dump", "-C", "recv", "--context-filter", `dev == "eth0"`,
+			"-P", "xmit", "-F", `dev == "eth1"`, "-o", "ip"},
 	} {
 		RunCommandTest(t, args)
 	}
