@@ -40,7 +40,7 @@ func (d *testDeps) GuessUnderlayDeviceFilters(itfName string) ([]*skbtrace.Filte
 func RunCommandTest(t *testing.T, args []string) {
 	cmdlineStr := strings.Join(args, "_")
 	errorMsg := fmt.Sprintf("Error in test for command %s", cmdlineStr)
-	for _, punct := range []string{"/", ":", " ", ">"} {
+	for _, punct := range []string{"/", ":", " ", ">", `"`} {
 		cmdlineStr = strings.ReplaceAll(cmdlineStr, punct, "_")
 	}
 
@@ -50,7 +50,7 @@ func RunCommandTest(t *testing.T, args []string) {
 		buf, err := executeCommand(args)
 		require.NoError(t, err, errorMsg)
 
-		testOutputPath := "testdata/" + strings.Replace(cmdlineStr, "/", "_", -1) + ".txt"
+		testOutputPath := "testdata/" + cmdlineStr + ".txt"
 		if _, err := os.Stat(testOutputPath); os.IsNotExist(err) {
 			// On the first run (or if file was deleted) rewrite expected output
 			ioutil.WriteFile(testOutputPath, buf.Bytes(), 0644)
