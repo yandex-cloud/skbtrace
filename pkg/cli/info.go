@@ -2,6 +2,7 @@ package cli
 
 import (
 	"fmt"
+	"github.com/yandex-cloud/skbtrace"
 	"strings"
 
 	"github.com/olekukonko/tablewriter"
@@ -90,6 +91,39 @@ var FieldsCommand = &CommandProducer{
 				}
 			}
 			tw.Render()
+		}
+	},
+}
+
+var FeaturesCommand = &CommandProducer{
+	Base: &cobra.Command{
+		Use:   "features",
+		Short: "Shows list of supported features and their state",
+	},
+
+	InfoVisitor: func(ctx *VisitorContext, cmd *cobra.Command) {
+		cmd.RunE = func(cmd *cobra.Command, args []string) error {
+			tw := tablewriter.NewWriter(ctx.Dependencies.Output())
+			tw.SetHeader([]string{"COMPONENT", "MINVER", "FEATURE", "STATE", "HELP"})
+
+			componentMap := ctx.Dependencies.FeatureComponents()
+			for compName, spec := range componentMap {
+				features := skbtrace.GetKnownFeatures(spec.Component)
+				mask := ctx.FeatureFlagMasks[spec.Component]
+
+				for _, feature := range features {
+					tw.Append([]string{
+						compName,
+						feature.MinVersion.String(),
+						feature.Name,
+						fmt.Sprint(mask.Supports(feature)),
+						feature.Help,
+					})
+				}
+			}
+
+			tw.Render()
+			return nil
 		}
 	},
 }

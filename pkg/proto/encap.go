@@ -160,9 +160,10 @@ func RegisterOverlayLengthFuncProtoChain(b *skbtrace.Builder, protoChain []strin
 		})
 }
 
-func RegisterEncap(b *skbtrace.Builder, encap string) {
+func RegisterEncap(b *skbtrace.Builder, encap string, featureMask skbtrace.FeatureFlagMask) {
+	udpRows, _ := newTransFields(featureMask)
 	b.AddFieldGroups(encapFieldGroups)
-	b.AddFieldGroupTemplate(ipFieldGroup.Wrap(ObjIpHdrOuter, "outer"), ipRows)
+	b.AddFieldGroupTemplate(ipFieldGroup.Wrap(ObjIpHdrOuter, "outer"), newIpRows(featureMask))
 	b.AddFieldGroupTemplate(udpFieldGroup.Wrap(ObjUdpHdrOuter, "outer"), udpRows)
 	b.AddStructDef("mplshdr", mplsHdrDef)
 	b.AddStructDef("iphdr", ipHdrDef)

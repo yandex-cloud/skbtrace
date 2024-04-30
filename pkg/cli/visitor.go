@@ -21,17 +21,17 @@ type PreRunEFunc func(cmd *cobra.Command, args []string) error
 type PreRunEChain []PreRunEFunc
 
 // CommandProducer workarounds cobra limitations, specifically:
-//	- lack of ability to inject parsed data structures (and tending to
-//	  use global structures)
-// 	- "persistent" methods are being inherited, but overridden, wherever
-//	  skbtrace requires a combination of both.
+//   - lack of ability to inject parsed data structures (and tending to
+//     use global structures)
+//   - "persistent" methods are being inherited, but overridden, wherever
+//     skbtrace requires a combination of both.
 //
 // To avoid that, each node in CommandProducer tree implements one of
 // the *Visitor methods which receives:
-//	- current visitor context including some global options
-//  - command to register options, pre-run and run methods
-//  - pointer to most-specific set of options (not filled yet,
-//	  as parsing is done on command execution).
+//   - current visitor context including some global options
+//   - command to register options, pre-run and run methods
+//   - pointer to most-specific set of options (not filled yet,
+//     as parsing is done on command execution).
 //
 // Each Visitor method might produce even more specific options structure
 // and link another pre-run function that will copy options parsed by
@@ -42,7 +42,6 @@ type PreRunEChain []PreRunEFunc
 //
 // Finally, leaf CommandProducers register cmd.Run in their visitors
 // adding real implementation to the command supplied.
-//
 type CommandProducer struct {
 	Base     *cobra.Command
 	Children []*CommandProducer
@@ -73,6 +72,9 @@ type Dependencies interface {
 	// probe specification which are suitable for the interface, for example
 	// multiple underlay interfaces with differing labels might exist
 	GuessUnderlayDeviceFilters(itfName string) ([]*skbtrace.Filter, error)
+
+	// FeatureComponents provides a map of supported feature component specifications
+	FeatureComponents() map[string]skbtrace.FeatureComponentSpec
 }
 
 type VisitorContext struct {
@@ -81,9 +83,12 @@ type VisitorContext struct {
 
 	RunnerOptions skbtrace.RunnerOptions
 
-	IsIPv6        bool
-	EncapType     string
-	StructKeyword string
+	IsIPv6    bool
+	EncapType string
+
+	featureMaskArgs  [skbtrace.FeatureComponentCount]string
+	featureVerArgs   [skbtrace.FeatureComponentCount]string
+	FeatureFlagMasks [skbtrace.FeatureComponentCount]skbtrace.FeatureFlagMask
 
 	PreRunEChain PreRunEChain
 }
@@ -148,7 +153,7 @@ func (root *CommandProducer) registerRootFlags(
 		`Path to bpftrace binary`)
 	flags.DurationVarP(&opts.Timeout, "timeout", "T", defaultTimeout,
 		`Execution timeout for resulting bpftrace script`)
-	flags.StringVarP(&ctx.EncapType, "encap", "e", proto.EncapProtoGre,
+	flags.StringVarP(&ctx.EncapType, "encap", "e", proto.EncapProtoUdp,
 		`Type of encapsulation: 'gre' or 'udp'`)
 	flags.BoolVarP(&ctx.IsIPv6, "inet6", "6", false,
 		`If specified, skbtrace assumes that inner header is IPv6.`)
@@ -156,31 +161,37 @@ func (root *CommandProducer) registerRootFlags(
 		`Protocol hints for weak field aliases such as 'tcp' for 'sport'.`)
 	flags.StringVar(&opts.TimeUnit, "unit", skbtrace.TUMicrosecond,
 		`Time unit using for measurements: 'sec', 'ms', 'us' - default or 'ns'`)
-	flags.StringVar(&ctx.StructKeyword, "struct-keyword", "auto",
-		`Use struct keyword in casts: "" - do not use, "struct" - use, `+
-			`"auto" - deduce based on bpftrace version.`)
+
+	for name, spec := range ctx.Dependencies.FeatureComponents() {
+		flags.StringVar(&ctx.featureVerArgs[spec.Component], fmt.Sprintf("%s-version", name), "",
+			fmt.Sprintf(`Specifies %s version compatibility level`, name))
+		flags.StringVar(&ctx.featureMaskArgs[spec.Component], fmt.Sprintf("%s-features", name), "",
+			fmt.Sprintf(`Specifies %s features as comma separated list`, name))
+	}
 }
 
 func (root *CommandProducer) setup(ctx *VisitorContext, opts *skbtrace.CommonOptions) error {
-	switch ctx.StructKeyword {
-	case "":
-		ctx.Builder.SetUseStructKeyword(false)
-	case "struct":
-		ctx.Builder.SetUseStructKeyword(true)
-	case "auto":
-		ver := skbtrace.GetVersion()
-		ctx.Builder.SetUseStructKeyword(ver.EqualOrNewer(skbtrace.StructKeywordVersion))
-	default:
-		return fmt.Errorf("unexpected struct keyword mode '%s'", ctx.StructKeyword)
+	for name, spec := range ctx.Dependencies.FeatureComponents() {
+		mask, err := spec.ProcessFeatures(ctx.featureVerArgs[spec.Component], ctx.featureMaskArgs[spec.Component])
+		if err != nil {
+			return fmt.Errorf("error processing features of component %q: %w", name, err)
+		}
+		ctx.FeatureFlagMasks[spec.Component] = mask
 	}
 
-	skb.RegisterSkb(ctx.Builder)
+	var (
+		bpfTraceFeatureMask = ctx.FeatureFlagMasks[skbtrace.FeatureComponentBPFTrace]
+		kernelFeatureMask   = ctx.FeatureFlagMasks[skbtrace.FeatureComponentKernel]
+	)
+	ctx.Builder.SetFeatures(bpfTraceFeatureMask)
+
+	skb.RegisterSkb(ctx.Builder, bpfTraceFeatureMask, kernelFeatureMask)
 	skb.RegisterTask(ctx.Builder)
 
-	proto.RegisterEth(ctx.Builder)
-	proto.RegisterEncap(ctx.Builder, ctx.EncapType)
-	proto.RegisterIp(ctx.Builder, ctx.IsIPv6)
-	proto.RegisterTransport(ctx.Builder, ctx.IsIPv6)
+	proto.RegisterEth(ctx.Builder, bpfTraceFeatureMask)
+	proto.RegisterEncap(ctx.Builder, ctx.EncapType, bpfTraceFeatureMask)
+	proto.RegisterIp(ctx.Builder, ctx.IsIPv6, bpfTraceFeatureMask)
+	proto.RegisterTransport(ctx.Builder, ctx.IsIPv6, bpfTraceFeatureMask)
 
 	proto.RegisterOverlayLengthFunc(ctx.Builder, ctx.EncapType)
 	proto.RegisterInnerIpLengthFunc(ctx.Builder, ctx.IsIPv6)

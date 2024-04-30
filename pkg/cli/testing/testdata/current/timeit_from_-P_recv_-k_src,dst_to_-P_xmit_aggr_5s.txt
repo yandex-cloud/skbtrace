@@ -21,17 +21,18 @@ sudo BPFTRACE_STRLEN=80 bpftrace -e '
         exit();
     }
 
-    kprobe:netif_receive_skb_internal {
-        $skb = (sk_buff*) arg0;
-        $iph = (iphdr*) ($skb->head + $skb->network_header);
+    kprobe:__netif_receive_skb_core {
+        $pskb = (struct sk_buff**) arg0;
+        $skb = *$pskb;
+        $iph = (struct iphdr*) ($skb->head + $skb->network_header);
         if ($iph->ihl_version == 0x45) {
             @start_time[$iph->saddr, $iph->daddr] = nsecs;
         }
     }
 
     kprobe:dev_queue_xmit {
-        $skb = (sk_buff*) arg0;
-        $iph = (iphdr*) ($skb->head + $skb->network_header);
+        $skb = (struct sk_buff*) arg0;
+        $iph = (struct iphdr*) ($skb->head + $skb->network_header);
         if ($iph->ihl_version == 0x45) {
             $st = @start_time[$iph->saddr, $iph->daddr];
             if ($st > 0) {

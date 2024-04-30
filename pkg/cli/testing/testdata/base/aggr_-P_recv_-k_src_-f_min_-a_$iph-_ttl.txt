@@ -1,0 +1,38 @@
+sudo BPFTRACE_STRLEN=80 bpftrace -e '
+    #include <linux/types.h>
+    #include <linux/skbuff.h>
+
+    struct iphdr {
+        struct {
+            uint8_t ihl_version;
+            uint8_t tos;
+            uint16_t tot_len;
+            uint16_t id;
+            uint16_t frag_off;
+            uint8_t ttl;
+            uint8_t protocol;
+            uint16_t check;
+            uint32_t saddr;
+            uint32_t daddr;
+        } __attribute__((packed));
+    }
+
+    interval:s:60 {
+        exit();
+    }
+
+    kprobe:__netif_receive_skb_core {
+        $skb = (sk_buff*) arg0;
+        $iph = (iphdr*) ($skb->head + $skb->network_header);
+        if ($iph->ihl_version == 0x45) {
+            @[ntop(2, $iph->saddr)] = min($iph->ttl);
+        }
+        @hits["recv:filtered"] = count();
+        @hits["recv"] = count();
+    }
+
+    interval:s:1 {
+        time();
+        print(@);
+        clear(@);
+    }'

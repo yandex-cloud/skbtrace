@@ -2,6 +2,7 @@ package skb
 
 import (
 	"bytes"
+	"fmt"
 	"strconv"
 
 	"github.com/yandex-cloud/skbtrace"
@@ -9,7 +10,7 @@ import (
 
 const (
 	ProbeXmit = "kprobe:dev_queue_xmit"
-	ProbeRecv = "kprobe:netif_receive_skb_internal"
+	ProbeRecv = "kprobe:__netif_receive_skb_core"
 )
 
 // Offset of cb field in sk_buff which contains overlay control structure
@@ -22,58 +23,89 @@ const (
 var skbHeaderFiles = []string{"linux/skbuff.h"}
 var netdevHeaderFiles = []string{"linux/netdevice.h"}
 
-var fieldsSkb = []*skbtrace.FieldGroup{
-	{Row: "__skb_checksum", Fields: []*skbtrace.Field{
-		{Name: "offset"},
-		{Name: "len"}}},
+var freeSkbReasonFeature = &skbtrace.Feature{
+	Component: skbtrace.FeatureComponentKernel,
+	Name:      "kfree_skb_reason",
+	Help:      "kfree_skb_reason is a new version of packet free that provides numeric reason for packet drop",
 
-	{Object: "$skb", Row: "layout", Fields: []*skbtrace.Field{
-		{Name: "hroom", Converter: skbtrace.NewObjectConvExpr("%[1]s->data - %[1]s->head"),
-			Help: "Head room -- space before packet data used to push extra headers"},
-		{Name: "hlen", Converter: skbtrace.NewObjectConvExpr("%[1]s->len - %[1]s->data_len"),
-			Help: "Head length -- space used by headers before data pointer"},
-		{Name: "mac_header", FmtKey: "mac hoff"},
-		{Name: "network_header", FmtKey: "net hoff"},
-		{Name: "transport_header", FmtKey: "trans hoff"},
-	}},
-	{Object: "$skb", Row: "layout", Fields: []*skbtrace.Field{
-		{Name: "len"},
-		{Name: "data_len"},
-		{Name: "troom", Converter: skbtrace.NewObjectConvExpr("%[1]s->tail - %[1]s->end")},
-		{Name: "truesize"},
-	}},
+	// use LTS version commit here
+	Commit:     "5158e18225c06f39cde0176a431db6e60f52ebc2",
+	MinVersion: skbtrace.Version{Major: 5, Submajor: 15, Minor: 93},
+}
 
-	{Object: "$skb", Row: "checksum", Fields: []*skbtrace.Field{
-		{Name: "ip_summed", Converter: skbtrace.NewConvBitfieldExpr(5, 0x3)},
-		{Name: "csum_start", FmtKey: "start"},
-		{Name: "csum_offset", FmtKey: "off"},
-	}},
+var recvSkbRefFeature = &skbtrace.Feature{
+	Component: skbtrace.FeatureComponentKernel,
+	Name:      "__netif_receive_skb_core:ref",
+	Help:      "__netif_receive_skb_core receives skb by sk_buff**",
 
-	{Object: "$skbsi", Row: "flags", Fields: []*skbtrace.Field{
-		{Name: "page_offset", FmtKey: "pgoff"},
-		{Name: "size", FmtKey: "size"},
-	}},
+	// use LTS version commit here
+	Commit:     "c0bbbdc32febd4f034ecbf3ea17865785b2c0652",
+	MinVersion: skbtrace.Version{Major: 5, Submajor: 10, Minor: 65},
+}
 
-	{Object: "$skbsi", Row: "gso", Fields: []*skbtrace.Field{
-		{Name: "nr_frags"},
-		{Name: "gso_size"},
-		{Name: "gso_segs"},
-		{Name: "gso_type"},
-	}},
+func newFieldsSkb(featureMask skbtrace.FeatureFlagMask) []*skbtrace.FieldGroup {
+	return []*skbtrace.FieldGroup{
+		{Row: "__skb_checksum", Fields: []*skbtrace.Field{
+			{Name: "offset"},
+			{Name: "len"}}},
 
-	{Object: "$netdev", Row: "netdev", Fields: []*skbtrace.Field{
-		{Name: "name", Alias: DevNameAlias, FmtSpec: "%s"},
-		{Name: "mtu"},
-		{Name: "state", FmtSpec: "%x"},
-		{Name: "features", FmtSpec: "%x"}}},
+		{Object: "$skb", Row: "layout", Fields: []*skbtrace.Field{
+			{Name: "hroom",
+				Converter: skbtrace.NewObjectBinOpConvExpr("%[1]s->data", "%[1]s->head", "-", skbtrace.TUInt64, featureMask),
+				Help:      "Head room -- space before packet data used to push extra headers"},
+			{Name: "hlen", Converter: skbtrace.NewObjectConvExpr("%[1]s->len - %[1]s->data_len"),
+				Help: "Head length -- space used by headers before data pointer"},
+			{Name: "mac_header", FmtKey: "mac hoff"},
+			{Name: "network_header", FmtKey: "net hoff"},
+			{Name: "transport_header", FmtKey: "trans hoff"},
+		}},
+		{Object: "$skb", Row: "layout", Fields: []*skbtrace.Field{
+			{Name: "len"},
+			{Name: "data_len"},
+			{Name: "troom", Converter: skbtrace.NewObjectConvExpr("%[1]s->tail - %[1]s->end")},
+			{Name: "truesize"},
+		}},
+
+		{Object: "$skb", Row: "checksum", Fields: []*skbtrace.Field{
+			{Name: "ip_summed", Converter: skbtrace.NewConvBitfieldExpr(5, 0x3)},
+			{Name: "csum_start", FmtKey: "start"},
+			{Name: "csum_offset", FmtKey: "off"},
+		}},
+
+		{Object: "$skbsi", Row: "flags", Fields: []*skbtrace.Field{
+			{Name: "page_offset", FmtKey: "pgoff"},
+			{Name: "size", FmtKey: "size"},
+		}},
+
+		{Object: "$skbsi", Row: "gso", Fields: []*skbtrace.Field{
+			{Name: "nr_frags"},
+			{Name: "gso_size"},
+			{Name: "gso_segs"},
+			{Name: "gso_type"},
+		}},
+
+		{Object: "$netdev", Row: "netdev", Fields: []*skbtrace.Field{
+			{Name: "name", Alias: DevNameAlias, FmtSpec: "%s"},
+			{Name: "mtu"},
+			{Name: "state", FmtSpec: "%x"},
+			{Name: "features", FmtSpec: "%x"}}},
+	}
 }
 
 var objSkb = []*skbtrace.Object{
+	// Sk buff double ref
+	{Variable: "pskb"},
+	{Variable: "$pskb", HeaderFiles: skbHeaderFiles,
+		Casts: map[string]string{
+			"pskb": `{{ .Dst }} = ({{ StructKeyword }}sk_buff**) {{ .Src }}`,
+		}},
+
 	// Raw sk buff pointer
 	{Variable: "skb"},
 	{Variable: "$skb", HeaderFiles: skbHeaderFiles,
 		Casts: map[string]string{
-			"skb": `{{ .Dst }} = ({{ StructKeyword }}sk_buff*) {{ .Src }}`,
+			"skb":   `{{ .Dst }} = ({{ StructKeyword }}sk_buff*) {{ .Src }}`,
+			"$pskb": `{{ .Dst }} = *{{ .Src }}`,
 		}},
 
 	// Skb control buffer: a 48-byte part of skb structure which is used
@@ -96,14 +128,35 @@ var objSkb = []*skbtrace.Object{
 		}},
 }
 
-var probesSkb = []*skbtrace.Probe{
-	{Name: ProbeXmit, Aliases: []string{"xmit"}, Args: map[string]string{"skb": "arg0"},
-		Help: "dev_queue_xmit() is called when kernel tries to put skb to a send queue of respective device"},
-	{Name: ProbeRecv, Aliases: []string{"recv"}, Args: map[string]string{"skb": "arg0"},
-		Help: "netif_receive_skb_internal() is called when kernel receives a packet"},
-	{Name: "kprobe:kfree_skb", Aliases: []string{"free"}, Args: map[string]string{"skb": "arg0"},
-		Help: "all packets are freed by kfree_skb()"},
+var xmitProbeSkb = &skbtrace.Probe{
+	Name: ProbeXmit, Aliases: []string{"xmit"}, Args: map[string]string{"skb": "arg0"},
+	Help: "dev_queue_xmit() is called when kernel tries to put skb to a send queue of respective device"}
 
+func newRecvSkbProbe(mask skbtrace.FeatureFlagMask) *skbtrace.Probe {
+	skbArg := "skb"
+	if mask.Supports(recvSkbRefFeature) {
+		skbArg = "pskb"
+	}
+
+	return &skbtrace.Probe{
+		Name: ProbeRecv, Aliases: []string{"recv"}, Args: map[string]string{skbArg: "arg0"},
+		Help: "__netif_receive_skb_core() is called when kernel receives a packet"}
+}
+
+func newFreeSkbProbe(mask skbtrace.FeatureFlagMask) *skbtrace.Probe {
+	funcName := "kfree_skb"
+	args := map[string]string{"skb": "arg0"}
+	if mask.Supports(freeSkbReasonFeature) {
+		funcName = "kprobe:kfree_skb_reason"
+		args["reason"] = "arg1"
+	}
+
+	return &skbtrace.Probe{
+		Name: "kprobe:" + funcName, Aliases: []string{"free"}, Args: args,
+		Help: fmt.Sprintf("all packets are freed by %s()", funcName)}
+}
+
+var extProbesSkb = []*skbtrace.Probe{
 	// Checksumming and some offload functions
 	{Name: "kprobe:__skb_checksum", Args: map[string]string{"skb": "arg0", "offset": "arg1", "len": "arg2"},
 		Help: "__skb_checksum() is called when kernel computes checksum for a packet"},
@@ -169,10 +222,19 @@ func (dcb *DataCastBuilder) Build() string {
 	return dcb.buf.String()
 }
 
-func RegisterSkb(b *skbtrace.Builder) {
+func RegisterSkb(b *skbtrace.Builder, bpfTraceFeatureMask, kernelFeatureMask skbtrace.FeatureFlagMask) {
 	b.AddObjects(objSkb)
-	b.AddProbes(probesSkb)
-	b.AddFieldGroups(fieldsSkb)
+	b.AddProbes([]*skbtrace.Probe{
+		xmitProbeSkb,
+		newRecvSkbProbe(kernelFeatureMask),
+		newFreeSkbProbe(kernelFeatureMask),
+	})
+	b.AddProbes(extProbesSkb)
+	b.AddFieldGroups(newFieldsSkb(bpfTraceFeatureMask))
 
 	b.AddCastFunction("SkbCbOffset", func() string { return SkbCbOffset })
+}
+
+func init() {
+	skbtrace.RegisterFeatures(freeSkbReasonFeature, recvSkbRefFeature)
 }

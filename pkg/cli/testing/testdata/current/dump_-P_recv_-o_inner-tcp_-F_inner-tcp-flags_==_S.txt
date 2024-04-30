@@ -1,0 +1,60 @@
+sudo BPFTRACE_STRLEN=80 bpftrace -e '
+    #include <linux/types.h>
+    #include <linux/skbuff.h>
+
+    struct iphdr {
+        struct {
+            uint8_t ihl_version;
+            uint8_t tos;
+            uint16_t tot_len;
+            uint16_t id;
+            uint16_t frag_off;
+            uint8_t ttl;
+            uint8_t protocol;
+            uint16_t check;
+            uint32_t saddr;
+            uint32_t daddr;
+        } __attribute__((packed));
+    }
+
+    struct tcphdr {
+        struct {
+            uint16_t source;
+            uint16_t dest;
+            uint32_t seq;
+            uint32_t ack_seq;
+            uint8_t flags2_doff;
+            uint8_t flags1;
+            uint16_t window;
+            uint16_t check;
+            uint16_t urg_ptr;
+            uint8_t options[8];
+        } __attribute__((packed));
+    }
+
+    interval:s:60 {
+        exit();
+    }
+
+    kprobe:__netif_receive_skb_core {
+        $pskb = (struct sk_buff**) arg0;
+        $skb = *$pskb;
+        $in_iph = (struct iphdr*) ($skb->head + $skb->mac_header + 46);
+        if ($in_iph->ihl_version == 0x45) {
+            if ($in_iph->protocol == 6) {
+                $pskb = (struct sk_buff**) arg0;
+                $skb = *$pskb;
+                $in_tcph = (struct tcphdr*) ($skb->head + $skb->mac_header + 46 + 20);
+                if (($in_tcph->flags1 & 0x17) == 0x2) {
+                    time("%H:%M:%S.");
+                    printf("%09ld - kprobe:__netif_receive_skb_core\n", nsecs % 1000000000);
+                    printf("INNER-TCP: source %d dest %d check %x\n", bswap((uint16)$in_tcph->source), bswap((uint16)$in_tcph->dest), bswap((uint16)$in_tcph->check));
+                    printf("INNER-TCP: seq %lu ack_seq %lu doff %d win %d\n", bswap((uint32)$in_tcph->seq), bswap((uint32)$in_tcph->ack_seq), ($in_tcph->flags2_doff >> 4), bswap((uint16)$in_tcph->window));
+                    $tcp_flags = $in_tcph->flags1;
+                    printf("INNER-TCP: flags %s%s%s%s%s\n", ($tcp_flags & 0x2) ? "S" : "-", ($tcp_flags & 0x10) ? "A" : "-", ($tcp_flags & 0x8) ? "P" : "-", ($tcp_flags & 0x1) ? "F" : "-", ($tcp_flags & 0x4) ? "R" : "-");
+                    @hits["recv:filtered"] = count();
+                }
+            }
+        }
+        @hits["recv"] = count();
+    }'

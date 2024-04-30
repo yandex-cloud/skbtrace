@@ -22,7 +22,7 @@ sudo BPFTRACE_STRLEN=80 bpftrace -e '
         exit();
     }
 
-    kprobe:netif_receive_skb_internal {
+    kprobe:__netif_receive_skb_core {
         $skb = (sk_buff*) arg0;
         $netdev = $skb->dev;
         if ($netdev->name == "eth0") {
@@ -32,7 +32,7 @@ sudo BPFTRACE_STRLEN=80 bpftrace -e '
         @hits["recv"] = count();
     }
 
-    kretprobe:netif_receive_skb_internal {
+    kretprobe:__netif_receive_skb_core {
         delete(@trace_flag[tid]);
     }
 

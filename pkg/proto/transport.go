@@ -45,42 +45,49 @@ var tcpFlags = []tcpFlag{
 	{'R', tcpFlagRst},
 }
 
-var transCommonFieldsRow = []*skbtrace.Field{
-	{Name: "source", Alias: "sport", WeakAlias: true,
-		Converter: skbtrace.ConvNtohs, Preprocessor: skbtrace.FppNtohs,
-		Help: "Source port in TCP/UDP"},
-	{Name: "dest", Alias: "dport", WeakAlias: true,
-		Converter: skbtrace.ConvNtohs, Preprocessor: skbtrace.FppNtohs,
-		Help: "Destination port in TCP/UDP"},
-	{Name: "check", FmtSpec: "%x", Converter: skbtrace.ConvNtohs,
-		Help: "Checksum in TCP/UDP"},
+func newTransFields(featureMask skbtrace.FeatureFlagMask) (udpRows, tcpRows [][]*skbtrace.Field) {
+	ntohs := skbtrace.NewBSwapConv(featureMask, 16)
+	ntohl := skbtrace.NewBSwapConv(featureMask, 32)
+
+	var transCommonFieldsRow = []*skbtrace.Field{
+		{Name: "source", Alias: "sport", WeakAlias: true,
+			Converter: ntohs, Preprocessor: skbtrace.FppNtohs,
+			Help: "Source port in TCP/UDP"},
+		{Name: "dest", Alias: "dport", WeakAlias: true,
+			Converter: ntohs, Preprocessor: skbtrace.FppNtohs,
+			Help: "Destination port in TCP/UDP"},
+		{Name: "check", FmtSpec: "%x", Converter: ntohs,
+			Help: "Checksum in TCP/UDP"},
+	}
+
+	var udpFieldsRow = []*skbtrace.Field{
+		{Name: "len", Converter: ntohs,
+			Help: "Length of UDP datagram"},
+	}
+
+	var tcpFieldsRow = []*skbtrace.Field{
+		{Name: "seq", Alias: "seq", FmtSpec: "%lu", Converter: ntohl,
+			Help: "Absolute TCP Sequence Number"},
+		{Name: "ack_seq", Alias: "ack", FmtSpec: "%lu", Converter: ntohl,
+			Help: "Absolute TCP Acknowledge Number"},
+		{Name: "flags2_doff", FmtKey: "doff", Converter: convTcpDoff,
+			Help: "TCP Data Offset in 32-bite words"},
+		{Name: "window", FmtKey: "win", Converter: ntohs,
+			Help: "TCP Window Size"},
+	}
+
+	var tcpFlagsRow = []*skbtrace.Field{
+		{Name: "flags1", FmtKey: "flags", Alias: "tcp-flags",
+			FmtSpec:   strings.Repeat("%s", len(tcpFlags)),
+			Converter: convTcpFlags, Preprocessor: fppTcpFlags, FilterOperator: filterOpTcpFlags,
+			Help: "TCP Flags: S - SYN, A - ACK, P - PSH, F - FIN, R - RST"},
+	}
+
+	udpRows = [][]*skbtrace.Field{append(transCommonFieldsRow, udpFieldsRow...)}
+	tcpRows = [][]*skbtrace.Field{transCommonFieldsRow, tcpFieldsRow, tcpFlagsRow}
+	return
 }
 
-var udpFieldsRow = []*skbtrace.Field{
-	{Name: "len", Converter: skbtrace.ConvNtohs,
-		Help: "Length of UDP datagram"},
-}
-
-var tcpFieldsRow = []*skbtrace.Field{
-	{Name: "seq", Alias: "seq", FmtSpec: "%lu", Converter: skbtrace.ConvNtohl,
-		Help: "Absolute TCP Sequence Number"},
-	{Name: "ack_seq", Alias: "ack", FmtSpec: "%lu", Converter: skbtrace.ConvNtohl,
-		Help: "Absolute TCP Acknowledge Number"},
-	{Name: "flags2_doff", FmtKey: "doff", Converter: convTcpDoff,
-		Help: "TCP Data Offset in 32-bite words"},
-	{Name: "window", FmtKey: "win", Converter: skbtrace.ConvNtohs,
-		Help: "TCP Window Size"},
-}
-
-var tcpFlagsRow = []*skbtrace.Field{
-	{Name: "flags1", FmtKey: "flags", Alias: "tcp-flags",
-		FmtSpec:   strings.Repeat("%s", len(tcpFlags)),
-		Converter: convTcpFlags, Preprocessor: fppTcpFlags, FilterOperator: filterOpTcpFlags,
-		Help: "TCP Flags: S - SYN, A - ACK, P - PSH, F - FIN, R - RST"},
-}
-
-var udpRows = [][]*skbtrace.Field{append(transCommonFieldsRow, udpFieldsRow...)}
-var tcpRows = [][]*skbtrace.Field{transCommonFieldsRow, tcpFieldsRow, tcpFlagsRow}
 var udpFieldGroup = skbtrace.FieldGroup{Object: ObjUdpHdr, Row: "udp"}
 var tcpFieldGroup = skbtrace.FieldGroup{Object: ObjTcpHdr, Row: "tcp"}
 
@@ -188,7 +195,8 @@ func prepareTransportObjects(isIPv6 bool) {
 	}
 }
 
-func RegisterTransport(b *skbtrace.Builder, isIPv6 bool) {
+func RegisterTransport(b *skbtrace.Builder, isIPv6 bool, featureMask skbtrace.FeatureFlagMask) {
+	udpRows, tcpRows := newTransFields(featureMask)
 	b.AddFieldGroupTemplate(udpFieldGroup, udpRows)
 	b.AddFieldGroupTemplate(udpFieldGroup.Wrap(ObjUdpHdrInner, "inner"), udpRows)
 	b.AddFieldGroupTemplate(tcpFieldGroup, tcpRows)

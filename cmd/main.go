@@ -26,6 +26,19 @@ func (d *Dependencies) GuessUnderlayDeviceFilters(itfName string) ([]*skbtrace.F
 	return nil, nil
 }
 
+func (d *Dependencies) FeatureComponents() map[string]skbtrace.FeatureComponentSpec {
+	return map[string]skbtrace.FeatureComponentSpec{
+		"bpftrace": {
+			Component: skbtrace.FeatureComponentBPFTrace,
+			Provider:  &skbtrace.BPFTraceVersionProvider{},
+		},
+		"kernel": {
+			Component: skbtrace.FeatureComponentKernel,
+			Provider:  &skbtrace.KernelVersionProvider{},
+		},
+	}
+}
+
 func main() {
 	rootCmd := cli.RootCommand.NewRootCommand(&Dependencies{})
 	rootCmd.Execute()

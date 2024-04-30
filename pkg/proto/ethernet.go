@@ -14,13 +14,16 @@ const (
 )
 
 // NOTE: printf is limited to 7 args, so report mac using multiple prints
-var ethFieldGroups = []*skbtrace.FieldGroup{
-	{Row: "eth", Object: "$eth_hdr", Fields: []*skbtrace.Field{
-		{Name: "dst", FmtSpec: ethMacFmtSpec, Converter: convEthMac}}},
-	{Row: "eth", Object: "$eth_hdr", Fields: []*skbtrace.Field{
-		{Name: "src", FmtSpec: ethMacFmtSpec, Converter: convEthMac}}},
-	{Row: "eth", Object: "$eth_hdr", Fields: []*skbtrace.Field{
-		{Name: "protocol", FmtSpec: "0x%04x", Converter: skbtrace.ConvNtohs, Preprocessor: skbtrace.FppNtohs}}},
+func newEthFieldGroups(featureMask skbtrace.FeatureFlagMask) []*skbtrace.FieldGroup {
+	return []*skbtrace.FieldGroup{
+		{Row: "eth", Object: "$eth_hdr", Fields: []*skbtrace.Field{
+			{Name: "dst", FmtSpec: ethMacFmtSpec, Converter: convEthMac}}},
+		{Row: "eth", Object: "$eth_hdr", Fields: []*skbtrace.Field{
+			{Name: "src", FmtSpec: ethMacFmtSpec, Converter: convEthMac}}},
+		{Row: "eth", Object: "$eth_hdr", Fields: []*skbtrace.Field{
+			{Name: "protocol", FmtSpec: "0x%04x", Converter: skbtrace.NewBSwapConv(featureMask, 16),
+				Preprocessor: skbtrace.FppNtohs}}},
+	}
 }
 
 //go:embed headers/machdr.h
@@ -41,8 +44,8 @@ func convEthMac(obj, field string) ([]skbtrace.Statement, skbtrace.Expression) {
 	return nil, skbtrace.ExprJoin(byteExprs)
 }
 
-func RegisterEth(b *skbtrace.Builder) {
-	b.AddFieldGroups(ethFieldGroups)
+func RegisterEth(b *skbtrace.Builder, featureMask skbtrace.FeatureFlagMask) {
+	b.AddFieldGroups(newEthFieldGroups(featureMask))
 	b.AddStructDef("machdr", macHdrDef)
 	b.AddObjects(ethObjects)
 }

@@ -1,0 +1,5 @@
+Error building skbtrace script.
+  -  Error in probe 'unknown_probe': not found
+
+ To see available probes, use 'probes' command. Note that kprobe: and kretprobe:
+prefixes support short k: and kr: forms.

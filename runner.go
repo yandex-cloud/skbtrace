@@ -7,7 +7,6 @@ import (
 	"os"
 	"os/exec"
 	"regexp"
-	"strconv"
 	"strings"
 )
 
@@ -16,49 +15,47 @@ var bpfTraceEnv = []string{
 	"BPFTRACE_STRLEN=80",
 }
 
-type Version struct {
-	Major int
-	Minor int
-	Build int
-}
-
 type RunnerOptions struct {
 	DumpScript     bool
 	BPFTraceBinary string
 }
 
+type BPFTraceVersionProvider struct{}
+
 // NOTE: Yandex Cloud internal builds use build version prefix
-var reBpfTraceVersion = regexp.MustCompile(`bpftrace (?:gv|build-)(\d+)\.(\d+)\.(\d+)`)
-var safeDefaultVersion = Version{0, 9, 2}
-var StructKeywordVersion = Version{0, 9, 4}
+var (
+	reBPFTraceVersion = regexp.MustCompile(`bpftrace (?:v|gv|build-)(\d+)\.(\d+)\.(\d+)`)
+	reBPFTraceBuild   = regexp.MustCompile(`-(\d+)\.(\d+)`)
+)
+var safeDefaultVersion = Version{Major: 0, Submajor: 9, Minor: 2}
 
-func (v Version) EqualOrNewer(v2 Version) bool {
-	if v.Major != v2.Major {
-		return v.Major > v2.Major
-	}
-	if v.Minor != v2.Minor {
-		return v.Minor > v2.Minor
-	}
-	return v.Build > v2.Build
-}
-
-func GetVersion() Version {
+func (BPFTraceVersionProvider) Get() ([]byte, error) {
 	cmd := exec.Command("bpftrace", "-V")
 	out, err := cmd.CombinedOutput()
 	if err != nil {
-		return safeDefaultVersion
+		return nil, fmt.Errorf("error running bpftrace: %w", err)
+	}
+	return out, nil
+}
+
+func (BPFTraceVersionProvider) Parse(out []byte) (Version, error) {
+	matches := reBPFTraceVersion.FindSubmatch(out)
+	if len(matches) < 4 {
+		return safeDefaultVersion, fmt.Errorf("unexpected number of matches in bpftrace version %q", out)
 	}
 
-	matches := reBpfTraceVersion.FindSubmatch(out)
-	if len(matches) != 4 {
-		return safeDefaultVersion
+	verNumbers := matches[1:]
+	tail := out[len(matches[0]):]
+	tailMatches := reBPFTraceBuild.FindSubmatch(tail)
+	if len(tailMatches) > 1 {
+		verNumbers = append(verNumbers, tailMatches[1:]...)
 	}
 
-	var ver Version
-	for i, ptr := range []*int{&ver.Minor, &ver.Minor, &ver.Build} {
-		*ptr, _ = strconv.Atoi(string(matches[i+1]))
-	}
-	return ver
+	return NewVersionFromMatches(verNumbers)
+}
+
+func (BPFTraceVersionProvider) GetDefault() Version {
+	return safeDefaultVersion
 }
 
 func Run(w io.Writer, prog *Program, opt RunnerOptions) error {

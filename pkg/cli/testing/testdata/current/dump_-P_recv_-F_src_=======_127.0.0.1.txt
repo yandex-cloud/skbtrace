@@ -1,0 +1,8 @@
+Error building skbtrace script.
+  -  Error in filter 'src ======= 127.0.0.1': parse error
+
+ Filter can be specified in the format of: 'field op value'. Allowed operators:
+==, !=, >, <, >=, <=. Field can be specified in the following formats:
+  - '$obj->name' for struct field
+  - 'alias' for field aliases or 'variable' for global variables
+
