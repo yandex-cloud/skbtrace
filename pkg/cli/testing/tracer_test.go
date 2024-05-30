@@ -16,7 +16,7 @@ func TestDumpTest(t *testing.T) {
 		{"dump", "-P", "k:__skb_checksum", "-o", "task", "-o", "__skb_checksum", "-F", "len > 1000"},
 
 		// Inner TCP test
-		{"dump", "-P", "recv", "-o", "inner-tcp", "-F", "tcp-flags == S"},
+		{"dump", "-P", "recv", "-o", "inner-tcp", "-F", "inner-tcp-flags == S"},
 
 		// Inner IPv6/UDP test
 		{"dump", "-P", "recv", "-o", "inner-udp", "-6", "-F", "inner-dport == 53"},

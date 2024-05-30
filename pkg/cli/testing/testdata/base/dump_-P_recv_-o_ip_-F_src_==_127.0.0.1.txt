@@ -21,13 +21,13 @@ sudo BPFTRACE_STRLEN=80 bpftrace -e '
         exit();
     }
 
-    kprobe:netif_receive_skb_internal {
+    kprobe:__netif_receive_skb_core {
         $skb = (sk_buff*) arg0;
         $iph = (iphdr*) ($skb->head + $skb->network_header);
         if ($iph->ihl_version == 0x45) {
             if ($iph->saddr == 0x100007f) {
                 time("%H:%M:%S.");
-                printf("%09ld - kprobe:netif_receive_skb_internal\n", nsecs % 1000000000);
+                printf("%09ld - kprobe:__netif_receive_skb_core\n", nsecs % 1000000000);
                 $tot_len = $iph->tot_len;
                 $tot_len = ($tot_len >> 8) | (($tot_len & 0xff) << 8);
                 $frag_off = $iph->frag_off;

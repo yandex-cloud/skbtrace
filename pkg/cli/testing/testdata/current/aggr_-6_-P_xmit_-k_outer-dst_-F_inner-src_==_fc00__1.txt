@@ -44,11 +44,11 @@ sudo BPFTRACE_STRLEN=80 bpftrace -e '
     }
 
     kprobe:dev_queue_xmit {
-        $skb = (sk_buff*) arg0;
-        $in_ipv6h = (ipv6hdr*) ($skb->head + $skb->mac_header + 42);
+        $skb = (struct sk_buff*) arg0;
+        $in_ipv6h = (struct ipv6hdr*) ($skb->head + $skb->mac_header + 46);
         if ($in_ipv6h->priority_version & 0x60) {
             if ($in_ipv6h->saddr32[0] == 0xfc && $in_ipv6h->saddr32[1] == 0x0 && $in_ipv6h->saddr32[2] == 0x0 && $in_ipv6h->saddr32[3] == 0x1000000) {
-                $out_iph = (iphdr*) ($skb->head + $skb->mac_header + 14);
+                $out_iph = (struct iphdr*) ($skb->head + $skb->mac_header + 14);
                 if ($out_iph->ihl_version == 0x45) {
                     @[ntop(2, $out_iph->daddr)] = count();
                 }

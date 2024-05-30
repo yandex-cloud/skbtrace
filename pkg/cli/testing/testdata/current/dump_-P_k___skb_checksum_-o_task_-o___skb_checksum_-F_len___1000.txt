@@ -1,0 +1,15 @@
+sudo BPFTRACE_STRLEN=80 bpftrace -e '
+    interval:s:60 {
+        exit();
+    }
+
+    kprobe:__skb_checksum {
+        if (arg2 > 1000) {
+            time("%H:%M:%S.");
+            printf("%09ld - kprobe:__skb_checksum\n", nsecs % 1000000000);
+            printf("TASK: comm %s pid %d tid %d cpu %d\n", comm, pid, tid, cpu);
+            printf("__SKB_CHECKSUM: offset %d len %d\n", arg1, arg2);
+            @hits["k:__skb_checksum:filtered"] = count();
+        }
+        @hits["k:__skb_checksum"] = count();
+    }'

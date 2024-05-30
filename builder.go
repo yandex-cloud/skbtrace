@@ -166,14 +166,17 @@ func (b *Builder) AddObjectCasts(objCasts []*Object) {
 	}
 }
 
-// AddCastFunc registers function accessible from casts.
+// AddCastFunction registers function accessible from casts.
 func (b *Builder) AddCastFunction(name string, f interface{}) {
 	b.castFunctionMap[name] = f
 }
 
-// For newer bpftrace versions (0.9.4+) allows to add struct keyword
-// in cast expressions.
-func (b *Builder) SetUseStructKeyword(useKeyword bool) {
+// SetFeatures initializes builder based on host BPFTrace version
+func (b *Builder) SetFeatures(mask FeatureFlagMask) {
+	b.setUseStructKeyword(mask.Supports(FeatureStructKeyword))
+}
+
+func (b *Builder) setUseStructKeyword(useKeyword bool) {
 	var keyword string
 	if useKeyword {
 		keyword = "struct "

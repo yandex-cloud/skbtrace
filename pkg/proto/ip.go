@@ -26,51 +26,58 @@ const (
 
 const ipAddressNote = "Dotted form used both for formatting and as filter values."
 
-var ipFieldsRow1 = []*skbtrace.Field{
-	{Name: "ihl_version", FmtKey: "ihl/ver", FmtSpec: "%x",
-		SanityFilter: &skbtrace.Filter{Op: "==", Value: "0x45"}},
-	{Name: "tot_len", Alias: "iplen", Converter: skbtrace.ConvNtohs,
-		Help: "Total length of IP packet in bytes"},
-	{Name: "frag_off", FmtSpec: "%d (%s %s)", Converter: convFragOff,
-		Help: "Fragment offset in bytes, MF (More Fragments) and DF (Do no Fragment) flags."},
-	{Name: "check", FmtSpec: "%x", Converter: skbtrace.ConvNtohs},
-}
-var ipFieldsRow2 = []*skbtrace.Field{
-	{Name: "id", Alias: "id", FmtSpec: "%d", Converter: skbtrace.ConvNtohs},
-	{Name: "ttl",
-		Help: "IP Time To Live"},
-	{Name: "protocol",
-		Help: "IP Protocol Number as decimal (6 - TCP, 17 - UDP, 1 - ICMP)"},
-	{Name: "saddr", Alias: "src", WeakAlias: true, FmtSpec: "%s",
-		Converter: ConvNtopInet, Preprocessor: FppPtonInet,
-		Help: "Source IP Address. " + ipAddressNote},
-	{Name: "daddr", Alias: "dst", WeakAlias: true, FmtSpec: "%s",
-		Converter: ConvNtopInet, Preprocessor: FppPtonInet,
-		Help: "Destination IP Address. " + ipAddressNote},
+func newIpRows(featureMask skbtrace.FeatureFlagMask) [][]*skbtrace.Field {
+	ntohs := skbtrace.NewBSwapConv(featureMask, 16)
+
+	var ipFieldsRow1 = []*skbtrace.Field{
+		{Name: "ihl_version", FmtKey: "ihl/ver", FmtSpec: "%x",
+			SanityFilter: &skbtrace.Filter{Op: "==", Value: "0x45"}},
+		{Name: "tot_len", Alias: "iplen", Converter: ntohs,
+			Help: "Total length of IP packet in bytes"},
+		{Name: "frag_off", FmtSpec: "%d (%s %s)", Converter: newConvFragOff(ntohs),
+			Help: "Fragment offset in bytes, MF (More Fragments) and DF (Do no Fragment) flags."},
+		{Name: "check", FmtSpec: "%x", Converter: ntohs},
+	}
+	var ipFieldsRow2 = []*skbtrace.Field{
+		{Name: "id", Alias: "id", FmtSpec: "%d", Converter: ntohs},
+		{Name: "ttl",
+			Help: "IP Time To Live"},
+		{Name: "protocol",
+			Help: "IP Protocol Number as decimal (6 - TCP, 17 - UDP, 1 - ICMP)"},
+		{Name: "saddr", Alias: "src", WeakAlias: true, FmtSpec: "%s",
+			Converter: ConvNtopInet, Preprocessor: FppPtonInet,
+			Help: "Source IP Address. " + ipAddressNote},
+		{Name: "daddr", Alias: "dst", WeakAlias: true, FmtSpec: "%s",
+			Converter: ConvNtopInet, Preprocessor: FppPtonInet,
+			Help: "Destination IP Address. " + ipAddressNote},
+	}
+
+	return [][]*skbtrace.Field{ipFieldsRow1, ipFieldsRow2}
 }
 
-var ipv6FieldRow1 = []*skbtrace.Field{
-	{Name: "priority_version", FmtSpec: "%x",
-		SanityFilter: &skbtrace.Filter{Op: "&", Value: "0x60"}},
-	{Name: "flow_lbl", Alias: "id", FmtSpec: "0x%x", Converter: convIpv6FlowLabel,
-		ConverterMask: skbtrace.ConverterDump | skbtrace.ConverterHiddenKey | skbtrace.ConverterFilter},
-	{Name: "payload_len", Alias: "iplen", Converter: skbtrace.ConvNtohs, Preprocessor: skbtrace.FppNtohs},
-}
-var ipv6FieldRow2 = []*skbtrace.Field{
-	{Name: "nexthdr"},
-	{Name: "hop_limit"},
-	{Name: "saddr8", Alias: "src", WeakAlias: true, FmtKey: "src", FmtSpec: "%s",
-		Converter: ConvNtopInet6, ConverterMask: skbtrace.ConverterDump | skbtrace.ConverterHiddenKey,
-		FilterOperator: FiltopPtonInet6, Help: "Source IP Address. " + ipAddressNote},
-	{Name: "daddr8", Alias: "dst", WeakAlias: true, FmtKey: "dst", FmtSpec: "%s",
-		Converter: ConvNtopInet6, ConverterMask: skbtrace.ConverterDump | skbtrace.ConverterHiddenKey,
-		FilterOperator: FiltopPtonInet6, Help: "Destination IP Address. " + ipAddressNote},
+func newIpv6Rows(featureMask skbtrace.FeatureFlagMask) [][]*skbtrace.Field {
+	var ipv6FieldRow1 = []*skbtrace.Field{
+		{Name: "priority_version", FmtSpec: "%x",
+			SanityFilter: &skbtrace.Filter{Op: "&", Value: "0x60"}},
+		{Name: "flow_lbl", Alias: "id", FmtSpec: "0x%x", Converter: convIpv6FlowLabel,
+			ConverterMask: skbtrace.ConverterDump | skbtrace.ConverterHiddenKey | skbtrace.ConverterFilter},
+		{Name: "payload_len", Alias: "iplen", Converter: skbtrace.NewBSwapConv(featureMask, 16), Preprocessor: skbtrace.FppNtohs},
+	}
+	var ipv6FieldRow2 = []*skbtrace.Field{
+		{Name: "nexthdr"},
+		{Name: "hop_limit"},
+		{Name: "saddr8", Alias: "src", WeakAlias: true, FmtKey: "src", FmtSpec: "%s",
+			Converter: ConvNtopInet6, ConverterMask: skbtrace.ConverterDump | skbtrace.ConverterHiddenKey,
+			FilterOperator: FiltopPtonInet6, Help: "Source IP Address. " + ipAddressNote},
+		{Name: "daddr8", Alias: "dst", WeakAlias: true, FmtKey: "dst", FmtSpec: "%s",
+			Converter: ConvNtopInet6, ConverterMask: skbtrace.ConverterDump | skbtrace.ConverterHiddenKey,
+			FilterOperator: FiltopPtonInet6, Help: "Destination IP Address. " + ipAddressNote},
+	}
+
+	return [][]*skbtrace.Field{ipv6FieldRow1, ipv6FieldRow2}
 }
 
-var ipRows = [][]*skbtrace.Field{ipFieldsRow1, ipFieldsRow2}
 var ipFieldGroup = skbtrace.FieldGroup{Object: ObjIpHdr, Row: "ip"}
-
-var ipv6Rows = [][]*skbtrace.Field{ipv6FieldRow1, ipv6FieldRow2}
 var ipv6FieldGroup = skbtrace.FieldGroup{Object: ObjIpv6Hdr, Row: "ipv6"}
 
 //go:embed headers/iphdr.h
@@ -171,15 +178,17 @@ func FiltopPtonInet6(expr skbtrace.Expression, op, value string) (skbtrace.Expre
 	return skbtrace.ExprJoinOp(exprs, "&&"), nil
 }
 
-func convFragOff(obj string, field string) ([]skbtrace.Statement, skbtrace.Expression) {
-	stmts, expr := skbtrace.ConvNtohs(obj, field)
-	vars := []string{
-		fmt.Sprintf("(%s & 0x1fff) * 8", expr),
-		fmt.Sprintf(`(%s & 0x2000) ? "MF" : "-"`, expr),
-		fmt.Sprintf(`(%s & 0x4000) ? "DF" : "-"`, expr),
-	}
+func newConvFragOff(ntohs skbtrace.FieldConverter) skbtrace.FieldConverter {
+	return func(obj string, field string) ([]skbtrace.Statement, skbtrace.Expression) {
+		stmts, expr := ntohs(obj, field)
+		vars := []string{
+			fmt.Sprintf("(%s & 0x1fff) * 8", expr),
+			fmt.Sprintf(`(%s & 0x2000) ? "MF" : "-"`, expr),
+			fmt.Sprintf(`(%s & 0x4000) ? "DF" : "-"`, expr),
+		}
 
-	return stmts, skbtrace.Expression(strings.Join(vars, ", "))
+		return stmts, skbtrace.Expression(strings.Join(vars, ", "))
+	}
 }
 
 func RegisterInnerIpLengthFunc(b *skbtrace.Builder, isIPv6 bool) {
@@ -194,13 +203,15 @@ func RegisterInnerIpLengthFunc(b *skbtrace.Builder, isIPv6 bool) {
 		})
 }
 
-func RegisterIp(b *skbtrace.Builder, isIPv6 bool) {
+func RegisterIp(b *skbtrace.Builder, isIPv6 bool, featureMask skbtrace.FeatureFlagMask) {
 	if isIPv6 {
+		ipv6Rows := newIpv6Rows(featureMask)
 		b.AddFieldGroupTemplate(ipv6FieldGroup, ipv6Rows)
 		b.AddFieldGroupTemplate(ipv6FieldGroup.Wrap(ObjIpv6HdrInner, "inner"), ipv6Rows)
 		b.AddObjects(objIpv6)
 		b.AddStructDef("ipv6hdr", ipv6HdrDef)
 	} else {
+		ipRows := newIpRows(featureMask)
 		b.AddFieldGroupTemplate(ipFieldGroup, ipRows)
 		b.AddFieldGroupTemplate(ipFieldGroup.Wrap(ObjIpHdrInner, "inner"), ipRows)
 		b.AddObjects(objIp)

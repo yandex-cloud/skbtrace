@@ -1,0 +1,3 @@
+Error building skbtrace script.
+  -  Error in filter '$iph->saddr': error preprocessing value
+    -  invalid IPv4 address 'a.b.c.d'

@@ -1,0 +1,6 @@
+Error building skbtrace script.
+  -  Error in probe ' (from)': error building probe
+    -  Error in probe '': instance name is not specified
+
+ Probe name can be specified using -P (--probe) option. To see available options,
+use 'help' command.

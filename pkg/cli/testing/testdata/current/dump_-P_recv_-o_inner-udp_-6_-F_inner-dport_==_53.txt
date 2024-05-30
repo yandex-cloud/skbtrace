@@ -37,25 +37,19 @@ sudo BPFTRACE_STRLEN=80 bpftrace -e '
         exit();
     }
 
-    kprobe:netif_receive_skb_internal {
-        $skb = (sk_buff*) arg0;
-        $in_ipv6h = (ipv6hdr*) ($skb->head + $skb->mac_header + 42);
+    kprobe:__netif_receive_skb_core {
+        $pskb = (struct sk_buff**) arg0;
+        $skb = *$pskb;
+        $in_ipv6h = (struct ipv6hdr*) ($skb->head + $skb->mac_header + 46);
         if ($in_ipv6h->priority_version & 0x60) {
             if ($in_ipv6h->nexthdr == 17) {
-                $skb = (sk_buff*) arg0;
-                $in_udph = (udphdr*) ($skb->head + $skb->mac_header + 42 + 40);
+                $pskb = (struct sk_buff**) arg0;
+                $skb = *$pskb;
+                $in_udph = (struct udphdr*) ($skb->head + $skb->mac_header + 46 + 40);
                 if ($in_udph->dest == 13568) {
                     time("%H:%M:%S.");
-                    printf("%09ld - kprobe:netif_receive_skb_internal\n", nsecs % 1000000000);
-                    $source = $in_udph->source;
-                    $source = ($source >> 8) | (($source & 0xff) << 8);
-                    $dest = $in_udph->dest;
-                    $dest = ($dest >> 8) | (($dest & 0xff) << 8);
-                    $check = $in_udph->check;
-                    $check = ($check >> 8) | (($check & 0xff) << 8);
-                    $len = $in_udph->len;
-                    $len = ($len >> 8) | (($len & 0xff) << 8);
-                    printf("INNER-UDP: source %d dest %d check %x len %d\n", $source, $dest, $check, $len);
+                    printf("%09ld - kprobe:__netif_receive_skb_core\n", nsecs % 1000000000);
+                    printf("INNER-UDP: source %d dest %d check %x len %d\n", bswap((uint16)$in_udph->source), bswap((uint16)$in_udph->dest), bswap((uint16)$in_udph->check), bswap((uint16)$in_udph->len));
                     @hits["recv:filtered"] = count();
                 }
             }

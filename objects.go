@@ -7,6 +7,13 @@ import (
 	"text/template"
 )
 
+var FeatureStructKeyword = &Feature{
+	Component:  FeatureComponentBPFTrace,
+	Name:       "struct",
+	Help:       "Enforces usage of struct keyword in cast expressions",
+	MinVersion: Version{Major: 0, Submajor: 9, Minor: 4},
+}
+
 // Custom structure definition for use in bpftrace script. They're useful
 // when header file is not part of linux-headers package, or when
 // bpftrace cannot handle some aspects of the type properly, such as
@@ -27,7 +34,7 @@ type StructDef struct {
 }
 
 // Object is a representation of an object that can be accessed within
-// a probe and contains neccessary actions (casts) to infer it,
+// a probe and contains necessary actions (casts) to infer it,
 // sanity filters to check its correctness and typing information
 type Object struct {
 	// Name of the variable used for this object
@@ -250,4 +257,8 @@ func (b *Builder) findCastPath(
 	}
 
 	return nil, nil
+}
+
+func init() {
+	RegisterFeatures(FeatureStructKeyword)
 }

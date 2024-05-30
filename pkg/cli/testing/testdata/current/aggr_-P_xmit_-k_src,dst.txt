@@ -21,14 +21,14 @@ sudo BPFTRACE_STRLEN=80 bpftrace -e '
         exit();
     }
 
-    kprobe:netif_receive_skb_internal {
-        $skb = (sk_buff*) arg0;
-        $iph = (iphdr*) ($skb->head + $skb->network_header);
+    kprobe:dev_queue_xmit {
+        $skb = (struct sk_buff*) arg0;
+        $iph = (struct iphdr*) ($skb->head + $skb->network_header);
         if ($iph->ihl_version == 0x45) {
-            @[ntop(2, $iph->saddr)] = min($iph->ttl);
+            @[ntop(2, $iph->saddr), ntop(2, $iph->daddr)] = count();
         }
-        @hits["recv:filtered"] = count();
-        @hits["recv"] = count();
+        @hits["xmit:filtered"] = count();
+        @hits["xmit"] = count();
     }
 
     interval:s:1 {

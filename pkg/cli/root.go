@@ -49,6 +49,7 @@ var RootCommand = CommandProducer{
 		CommonDuplicateCommand,
 		ProbesCommand,
 		FieldsCommand,
+		FeaturesCommand,
 	},
 }
 
