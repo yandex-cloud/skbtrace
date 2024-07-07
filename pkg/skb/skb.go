@@ -147,7 +147,7 @@ func newFreeSkbProbe(mask skbtrace.FeatureFlagMask) *skbtrace.Probe {
 	funcName := "kfree_skb"
 	args := map[string]string{"skb": "arg0"}
 	if mask.Supports(freeSkbReasonFeature) {
-		funcName = "kprobe:kfree_skb_reason"
+		funcName = "kfree_skb_reason"
 		args["reason"] = "arg1"
 	}
 
