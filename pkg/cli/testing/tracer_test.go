@@ -42,6 +42,9 @@ func TestAggrTest(t *testing.T) {
 
 		// Inner IPv6 aggregate test
 		{"aggr", "-6", "-P", "xmit", "-k", "outer-dst", "-F", "inner-src == fc00::1"},
+
+		// Inner protocol hints test
+		{"aggr", "-6", "-P", "xmit", "-k", "inner-dport", "-p", "inner-udp"},
 	} {
 		RunCommandTest(t, args)
 	}

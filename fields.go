@@ -266,6 +266,16 @@ func (b *Builder) generatePrintStatements(fg *FieldGroup, probe *Probe) ([]State
 		strings.ToUpper(fg.Row), strings.Join(fmtSpecs, " "), ExprJoin(values))), nil
 }
 
+func (b *Builder) getKeyFieldWeakAliasRefs(frefs []*fieldAliasRef) []weakAliasRef {
+	weakRefs := make([]weakAliasRef, 0)
+	for _, fref := range frefs {
+		if fref.weakGroups != nil {
+			weakRefs = append(weakRefs, fref)
+		}
+	}
+	return weakRefs
+}
+
 // Parses key as supplied in CLI in obj->field notation to pair of token and
 // fieldName which can be used for
 func (b *Builder) parseKey(key string) (token string, fieldName string, err error) {
