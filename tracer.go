@@ -76,7 +76,7 @@ type TraceAggregateOptions struct {
 
 func (b *Builder) buildTracerImpl(
 	opt *TraceCommonOptions, rows []string,
-	builder func(block *Block) error,
+	builder func(block *Block, boSet builderObjectSet) error,
 ) (*Program, error) {
 	filters, err := b.prepareFilters(opt.FilterOptions)
 	if err != nil {
@@ -95,9 +95,9 @@ func (b *Builder) buildTracerImpl(
 	if len(opt.ContextProbeNames) > 0 {
 		traceFlagExpr := Exprf("@trace_flag[%s]", opt.ContextKey)
 		innerBuilder := builder
-		builder = func(block *Block) error {
+		builder = func(block *Block, boSet builderObjectSet) error {
 			innerBlock := block.AddIfBlock(traceFlagExpr)
-			return innerBuilder(innerBlock)
+			return innerBuilder(innerBlock, boSet)
 		}
 
 		contextFilters, err := b.prepareFilters(opt.ContextFilterOptions)
@@ -106,14 +106,14 @@ func (b *Builder) buildTracerImpl(
 		}
 
 		for _, probeName := range opt.ContextProbeNames {
-			if err = b.buildTracerProbe(prog, probeName, false, contextFilters, true, func(block *Block) error {
+			if err = b.buildTracerProbe(prog, probeName, false, contextFilters, true, boSet, func(block *Block, boSet builderObjectSet) error {
 				block.Addf("%s = 1", traceFlagExpr)
 				return nil
 			}); err != nil {
 				return nil, err
 			}
 
-			if err = b.buildTracerProbe(prog, probeName, true, nil, false, func(block *Block) error {
+			if err = b.buildTracerProbe(prog, probeName, true, nil, false, boSet, func(block *Block, boSet builderObjectSet) error {
 				block.Addf("delete(%s)", traceFlagExpr)
 				return nil
 			}); err != nil {
@@ -123,7 +123,7 @@ func (b *Builder) buildTracerImpl(
 	}
 
 	for _, probeName := range opt.ProbeNames {
-		if err = b.buildTracerProbe(prog, probeName, false, filters, true, builder); err != nil {
+		if err = b.buildTracerProbe(prog, probeName, false, filters, true, boSet, builder); err != nil {
 			return nil, err
 		}
 	}
@@ -133,14 +133,15 @@ func (b *Builder) buildTracerImpl(
 
 func (b *Builder) buildTracerProbe(
 	prog *Program, probeName string, isReturn bool, filters [][]*ProcessedFilter,
-	countHits bool, builder func(block *Block) error,
+	countHits bool, boSet builderObjectSet,
+	builder func(block *Block, boSet builderObjectSet) error,
 ) error {
 	probeBlock, block, err := b.addProbeBlock(prog, probeName, isReturn, filters)
 	if err != nil {
 		return err
 	}
 
-	err = builder(block)
+	err = builder(block, boSet)
 	if err != nil {
 		return newProbeBuildError(probeName, err)
 	}
@@ -159,20 +160,26 @@ func (b *Builder) buildTracerProbe(
 // by filters are met.
 func (b *Builder) BuildDumpTrace(opt TraceDumpOptions) (*Program, error) {
 	return b.buildTracerImpl(&opt.TraceCommonOptions, opt.FieldGroupRows,
-		func(block *Block) error {
+		func(block *Block, boSet builderObjectSet) error {
 			return b.addDumpRowsStatements(block, opt.CommonDumpOptions)
 		})
 }
 
 func (b *Builder) BuildAggregate(opt TraceAggregateOptions) (*Program, error) {
 	prog, err := b.buildTracerImpl(&opt.TraceCommonOptions, []string{},
-		func(block *Block) error {
+		func(block *Block, boSet builderObjectSet) error {
 			aggrBlock, aggrExpr, err := b.generateAggregateExpr(block, opt.Func, opt.Arg)
 			if err != nil {
 				return err
 			}
 
 			frefList, err := b.prepareKeys(opt.Keys)
+			if err != nil {
+				return err
+			}
+
+			weakRefs := b.getKeyFieldWeakAliasRefs(frefList)
+			err = b.resolveWeakAliasRefs(weakRefs, boSet)
 			if err != nil {
 				return err
 			}
