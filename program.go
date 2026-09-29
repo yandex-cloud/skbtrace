@@ -79,6 +79,16 @@ func (prog *Program) render(w io.Writer, initialIndent bool) error {
 	writeSep1 := func() { buf.WriteString("\n") }
 	writeSep2 := func() { buf.WriteString("\n\n") }
 
+	// Kernel headers can use true and uintptr_t before pulling in the headers
+	// that define them. Emit their kernel definitions before other includes.
+	if len(prog.HeaderFiles) != 0 {
+		buf.WriteString(indent)
+		buf.WriteString("#include <linux/stddef.h>\n")
+		buf.WriteString(indent)
+		buf.WriteString("#include <linux/types.h>\n")
+		writeSep = writeSep1
+	}
+
 	for headerFile := range prog.HeaderFiles {
 		buf.WriteString(indent)
 		buf.WriteString(fmt.Sprintf("#include <%s>\n", headerFile))
